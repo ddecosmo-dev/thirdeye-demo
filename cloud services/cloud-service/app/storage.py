@@ -1,3 +1,5 @@
+"""Filesystem-based run storage with JSON metadata per cycle."""
+
 from __future__ import annotations
 
 import json
@@ -63,5 +65,6 @@ def create_metadata(run_id: str, label: str, status: str, extra: dict[str, Any] 
     }
     if extra:
         base.update(extra)
+    # TODO: Introduce a schema version field for metadata evolution.
     write_metadata(run_id, base)
     return base

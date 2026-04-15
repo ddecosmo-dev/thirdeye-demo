@@ -1,3 +1,5 @@
+"""Image ingest helpers with zip validation and size limits."""
+
 from __future__ import annotations
 
 import io
@@ -13,6 +15,7 @@ from .storage import images_dir, raw_dir, read_metadata, write_metadata
 from .utils import ensure_dir
 
 
+# TODO: Extend to include per-file checksums if needed for audit.
 class ZipInspectionResult:
     def __init__(self, file_count: int, total_uncompressed: int) -> None:
         self.file_count = file_count
@@ -23,6 +26,7 @@ def _safe_zip_members(zf: zipfile.ZipFile) -> ZipInspectionResult:
     file_count = 0
     total_uncompressed = 0
 
+    # TODO: Enforce allowed file extensions (e.g., .jpg, .png).
     for info in zf.infolist():
         if info.is_dir():
             continue
@@ -47,6 +51,7 @@ def _write_upload_to_disk(upload: UploadFile, destination: str) -> int:
     ensure_dir(os.path.dirname(destination))
     size = 0
     with open(destination, "wb") as handle:
+        # TODO: Add per-request rate limiting or throttling if needed.
         while True:
             chunk = upload.file.read(1024 * 1024)
             if not chunk:
@@ -87,6 +92,7 @@ def ingest_zip(run_id: str, upload: UploadFile, metadata_json: str | None) -> di
             metadata_payload = json.loads(metadata_json)
         except json.JSONDecodeError as exc:
             raise HTTPException(status_code=400, detail="metadata_json is not valid JSON") from exc
+        # TODO: Validate metadata payload schema once defined.
         meta["ingest"]["metadata"] = metadata_payload
 
     write_metadata(run_id, meta)

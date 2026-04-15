@@ -60,3 +60,15 @@ curl -X POST http://localhost:8080/ingest \
   -F "metadata_json={\"notes\":\"oak upload\"}" \
   -F "file=@/path/to/images.zip"
 ```
+
+
+## Next steps
+
+Add image tag schema and a basic “inference done” update endpoint.
+Wire the edge URL (EDGE_BASE_URL) and test the start/stop/abort callbacks.
+Add auth token or shared secret to lock down /ingest and cycle endpoints.
+Setup model pipeline 
+
+TEST TEST
+
+Setup GUI

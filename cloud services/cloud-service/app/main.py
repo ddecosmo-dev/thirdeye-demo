@@ -1,3 +1,5 @@
+"""Cloud API entrypoint for cycle control and image ingest."""
+
 from __future__ import annotations
 
 import os
@@ -30,11 +32,13 @@ async def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
+# TODO: Add auth (shared secret/JWT) before exposing publicly.
 @app.post("/cycle/start", response_model=StartCycleResponse)
 async def start_cycle(payload: StartCycleRequest) -> StartCycleResponse:
     label = safe_label(payload.label)
     run_id = create_run_id(label)
 
+    # TODO: Add server-side validation of config schema once finalized.
     create_metadata(
         run_id,
         label=label,
@@ -46,11 +50,13 @@ async def start_cycle(payload: StartCycleRequest) -> StartCycleResponse:
         },
     )
 
+    # TODO: Include run_id in the edge start payload once edge supports it.
     await notify_edge("start", payload.model_dump())
 
     return StartCycleResponse(run_id=run_id, label=label, status="running")
 
 
+# TODO: Support idempotent stop requests with a "stopping" state.
 @app.post("/cycle/stop", response_model=CycleActionResponse)
 async def stop_cycle(run_id: str) -> CycleActionResponse:
     meta = read_metadata(run_id)
@@ -60,11 +66,13 @@ async def stop_cycle(run_id: str) -> CycleActionResponse:
     meta["ended_at"] = now_iso()
     write_metadata(run_id, meta)
 
+    # TODO: Retry notify_edge or enqueue if edge is offline.
     await notify_edge("stop", {"run_id": run_id})
 
     return CycleActionResponse(run_id=run_id, status="stopped")
 
 
+# TODO: Track abort reason history for debugging.
 @app.post("/cycle/abort", response_model=CycleActionResponse)
 async def abort_cycle(run_id: str, reason: str | None = None) -> CycleActionResponse:
     meta = read_metadata(run_id)
@@ -76,11 +84,13 @@ async def abort_cycle(run_id: str, reason: str | None = None) -> CycleActionResp
         meta["abort_reason"] = reason
     write_metadata(run_id, meta)
 
+    # TODO: Add audit log event for abort requests.
     await notify_edge("abort", {"run_id": run_id, "reason": reason})
 
     return CycleActionResponse(run_id=run_id, status="aborted")
 
 
+# TODO: Add checksum validation against client-provided value.
 @app.post("/ingest", response_model=IngestResponse)
 async def ingest(
     run_id: str | None = Form(default=None),
@@ -89,10 +99,12 @@ async def ingest(
 ) -> IngestResponse:
     if run_id is None:
         run_id = create_run_id("ingest")
+        # TODO: Replace "ingest" label with client-provided cycle label.
         create_metadata(run_id, label="ingest", status="uploaded")
     else:
         run_dir(run_id)
 
+    # TODO: Add per-file image validation (format, resolution, size).
     result = ingest_zip(run_id, file, metadata_json)
     checksum = sha256_file(result["raw_path"])
 
@@ -111,6 +123,7 @@ async def ingest(
     )
 
 
+# TODO: Add pagination and filters (status, date range, label).
 @app.get("/runs")
 async def list_runs() -> dict[str, Any]:
     root = runs_root()

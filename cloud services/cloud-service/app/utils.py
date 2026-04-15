@@ -1,3 +1,5 @@
+"""Shared helpers for run ids, timestamps, and hashing."""
+
 from __future__ import annotations
 
 import hashlib
@@ -23,6 +25,7 @@ def safe_label(label: str | None) -> str:
 
 
 def create_run_id(label: str | None) -> str:
+    # TODO: Add collision handling if two runs start in same second.
     return f"{utc_timestamp()}_{safe_label(label)}"
 
 

@@ -1,3 +1,5 @@
+"""API request/response models for cycle control and ingest."""
+
 from pydantic import BaseModel, Field
 from typing import Any
 
@@ -5,6 +7,7 @@ from typing import Any
 class StartCycleRequest(BaseModel):
     label: str | None = Field(default=None, max_length=64)
     duration_seconds: int | None = Field(default=None, ge=1, le=86400)
+    # TODO: Replace with a structured model once edge config is finalized.
     config: dict[str, Any] | None = None
 
 

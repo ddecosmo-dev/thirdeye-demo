@@ -1,3 +1,5 @@
+"""Edge notification helpers for cycle control actions."""
+
 from __future__ import annotations
 
 import httpx
@@ -12,6 +14,7 @@ async def notify_edge(action: str, payload: dict) -> None:
         return
     url = f"{settings.edge_base_url.rstrip('/')}/cycle/{action}"
     try:
+        # TODO: Add retry/backoff and circuit breaker behavior.
         async with httpx.AsyncClient(timeout=5.0) as client:
             response = await client.post(url, json=payload)
             if response.status_code >= 400:
