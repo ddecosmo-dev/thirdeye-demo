@@ -61,14 +61,14 @@ curl -X POST http://localhost:8080/ingest \
   -F "file=@/path/to/images.zip"
 ```
 
+## TODO list
+- Add auth token or shared secret for ingest and cycle control
+- Add image tag schema and inference status updates
+- Add pagination and filters for run listing
+- Add client-provided checksum validation on ingest
+- Wire edge callbacks for start/stop/abort tests
+- Add model pipeline and inference modules
 
 ## Next steps
-
-Add image tag schema and a basic “inference done” update endpoint.
-Wire the edge URL (EDGE_BASE_URL) and test the start/stop/abort callbacks.
-Add auth token or shared secret to lock down /ingest and cycle endpoints.
-Setup model pipeline 
-
-TEST TEST
-
-Setup GUI
+- Implement cloud inference pipeline and image scoring updates
+- Add a minimal GUI or API consumer for demo display

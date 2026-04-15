@@ -66,3 +66,10 @@ Status:
 ```
 curl http://localhost:8081/status
 ```
+
+## TODO list
+- Integrate Oak/DepthAI pipeline capture
+- Add auth token or shared secret for edge endpoints
+- Add upload retry/backoff and receipt validation
+- Enforce allowed image extensions in capture path
+- Add cleanup policy after cloud confirms receipt
