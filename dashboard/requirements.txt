@@ -7,8 +7,8 @@ uvicorn[standard]>=0.29.0
 python-multipart>=0.0.9
 
 # ML
-torch>=2.2.0
-torchvision>=0.17.0
+torch==2.6.0
+torchvision==0.21.0
 transformers>=4.40.0
 huggingface_hub>=0.22.0
 pyiqa>=0.1.10
