@@ -1,0 +1,25 @@
+# ThirdEye Dashboard — Python dependencies
+# Run: pip install -r requirements.txt
+
+# Server
+fastapi>=0.111.0
+uvicorn[standard]>=0.29.0
+python-multipart>=0.0.9
+
+# ML
+torch>=2.2.0
+torchvision>=0.17.0
+transformers>=4.40.0
+huggingface_hub>=0.22.0
+pyiqa>=0.1.10
+scikit-learn>=1.4.0
+hdbscan>=0.8.33
+
+# Image processing
+Pillow>=10.0.0
+pillow-heif>=0.18.0
+opencv-python>=4.9.0
+
+# Data
+numpy>=1.26.0
+pandas>=2.2.0

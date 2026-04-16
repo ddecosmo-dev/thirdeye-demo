@@ -1,0 +1,936 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ThirdEye — Hiking Memory Curation</title>
+  <script src="https://cdn.plot.ly/plotly-2.32.0.min.js"></script>
+  <style>
+    /* ── Reset & Base ─────────────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg:        #0f1117;
+      --surface:   #1a1d27;
+      --surface2:  #232635;
+      --border:    #2e3247;
+      --accent:    #5b8dee;
+      --accent2:   #a78bfa;
+      --green:     #34d399;
+      --yellow:    #fbbf24;
+      --red:       #f87171;
+      --text:      #e2e8f0;
+      --muted:     #7c85a2;
+      --font:      'Inter', system-ui, sans-serif;
+      --radius:    8px;
+    }
+    html, body { height: 100%; background: var(--bg); color: var(--text); font-family: var(--font); font-size: 14px; }
+
+    /* ── Layout ───────────────────────────────────────────────────────────── */
+    .header {
+      padding: 18px 24px 14px;
+      border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; gap: 12px;
+    }
+    .header h1 { font-size: 20px; font-weight: 700; letter-spacing: -0.3px; }
+
+    .controls {
+      padding: 16px 24px;
+      border-bottom: 1px solid var(--border);
+      display: flex; flex-direction: column; gap: 12px;
+    }
+
+    .run-row { display: flex; gap: 10px; align-items: center; }
+    .run-row input[type="text"] {
+      flex: 1;
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 9px 14px;
+      color: var(--text); font-size: 13px; outline: none;
+    }
+    .run-row input[type="text"]:focus { border-color: var(--accent); }
+    .run-row input[type="text"]::placeholder { color: var(--muted); }
+
+    .btn {
+      padding: 9px 20px; border-radius: var(--radius); border: none;
+      font-size: 13px; font-weight: 600; cursor: pointer; transition: opacity 0.15s;
+    }
+    .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    .btn-primary { background: var(--accent); color: #fff; }
+    .btn-primary:hover:not(:disabled) { opacity: 0.88; }
+    .btn-sm { padding: 5px 12px; font-size: 12px; }
+
+    /* ── Progress ─────────────────────────────────────────────────────────── */
+    .progress-wrap { display: none; }
+    .progress-wrap.visible { display: block; }
+    .progress-label {
+      display: flex; justify-content: space-between; margin-bottom: 6px;
+      font-size: 12px; color: var(--muted);
+    }
+    .progress-bar-bg {
+      background: var(--surface2); border-radius: 4px; height: 8px; overflow: hidden;
+    }
+    .progress-bar-fill {
+      height: 100%; background: var(--accent);
+      border-radius: 4px; transition: width 0.3s ease;
+    }
+    .progress-error { color: var(--red); font-size: 12px; margin-top: 6px; white-space: pre-wrap; }
+
+    /* ── Epsilon Slider ───────────────────────────────────────────────────── */
+    .epsilon-section { display: none; padding: 14px 24px 16px; border-bottom: 1px solid var(--border); }
+    .epsilon-section.visible { display: block; }
+    .epsilon-stats-row {
+      display: flex; gap: 28px; margin-bottom: 14px; flex-wrap: wrap; align-items: center;
+    }
+    .stat-chip {
+      display: flex; flex-direction: column; gap: 2px;
+    }
+    .stat-chip-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
+    .stat-chip-value { font-size: 18px; font-weight: 700; color: var(--text); line-height: 1; }
+    .epsilon-row { display: flex; align-items: center; gap: 12px; }
+    .epsilon-row + .epsilon-row { margin-top: 12px; }
+    .epsilon-label { font-size: 12px; color: var(--muted); min-width: 82px; text-align: right; }
+    .epsilon-row input[type="range"] { flex: 1; accent-color: var(--accent); cursor: pointer; }
+    .epsilon-range-bound { font-size: 11px; color: var(--muted); min-width: 28px; }
+    .epsilon-val { font-size: 13px; font-weight: 700; min-width: 38px; }
+    .epsilon-hint { font-size: 11px; color: var(--muted); }
+    /* ── Toggle ─────────────────────────────────────────────────────────────── */
+    .toggle-row { display: flex; align-items: center; gap: 10px; margin-top: 12px; }
+    .toggle-label { font-size: 12px; color: var(--muted); }
+    .toggle-switch {
+      position: relative; width: 36px; height: 20px; flex-shrink: 0;
+    }
+    .toggle-switch input { opacity: 0; width: 0; height: 0; }
+    .toggle-slider {
+      position: absolute; inset: 0; background: var(--surface2);
+      border: 1px solid var(--border); border-radius: 20px;
+      cursor: pointer; transition: background 0.2s;
+    }
+    .toggle-slider::before {
+      content: ''; position: absolute; width: 14px; height: 14px;
+      left: 2px; top: 2px; background: var(--muted);
+      border-radius: 50%; transition: transform 0.2s, background 0.2s;
+    }
+    .toggle-switch input:checked + .toggle-slider { background: var(--accent); border-color: var(--accent); }
+    .toggle-switch input:checked + .toggle-slider::before { transform: translateX(16px); background: #fff; }
+
+    .recluster-banner {
+      display: none; margin-top: 10px; padding: 8px 14px;
+      background: #3d2a0a; border: 1px solid #a16207; border-radius: var(--radius);
+      font-size: 12px; color: #fbbf24;
+    }
+    .recluster-banner.visible { display: block; }
+
+    /* ── Tabs ─────────────────────────────────────────────────────────────── */
+    .tabs { display: flex; gap: 0; border-bottom: 1px solid var(--border); padding: 0 24px; }
+    .tab-btn {
+      padding: 12px 18px; background: none; border: none; color: var(--muted);
+      font-size: 13px; font-weight: 500; cursor: pointer;
+      border-bottom: 2px solid transparent; margin-bottom: -1px; transition: color 0.15s;
+    }
+    .tab-btn:hover { color: var(--text); }
+    .tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+    .tab-content { display: none; padding: 20px 24px; }
+    .tab-content.active { display: block; }
+
+    /* ── Image Grid ───────────────────────────────────────────────────────── */
+    .image-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+      gap: 12px;
+    }
+    .img-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); overflow: hidden;
+      cursor: pointer; transition: border-color 0.15s, transform 0.15s;
+    }
+    .img-card:hover { border-color: var(--accent); transform: translateY(-2px); }
+    .img-card img {
+      width: 100%; aspect-ratio: 4/3; object-fit: cover; display: block;
+      background: var(--surface2);
+    }
+    .img-card-meta {
+      padding: 8px 10px; display: flex; flex-direction: column; gap: 4px;
+    }
+    .img-score { font-size: 13px; font-weight: 700; color: var(--text); }
+    .img-badges { display: flex; gap: 5px; flex-wrap: wrap; }
+    .badge {
+      font-size: 10px; font-weight: 600; padding: 2px 7px;
+      border-radius: 99px; background: var(--surface2); color: var(--muted);
+    }
+    .badge-cluster { background: #1e3a5f; color: #7ec8f8; }
+    .badge-noise    { background: #2a2a2a; color: #999; }
+    .badge-tech     { background: #3d1a1a; color: var(--red); }
+    .badge-outscored{ background: #2a2a1a; color: var(--yellow); }
+    .badge-champion { background: #1a3d2a; color: var(--green); }
+
+    /* ── Filter Buttons ───────────────────────────────────────────────────── */
+    .filter-row { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+    .filter-btn {
+      padding: 5px 14px; border-radius: 99px; border: 1px solid var(--border);
+      background: var(--surface); color: var(--muted);
+      font-size: 12px; font-weight: 500; cursor: pointer; transition: all 0.15s;
+    }
+    .filter-btn:hover, .filter-btn.active {
+      background: var(--accent); border-color: var(--accent); color: #fff;
+    }
+
+    /* ── Score Distribution ───────────────────────────────────────────────── */
+    .dist-controls { display: flex; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; }
+    .dist-controls select {
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 7px 12px;
+      color: var(--text); font-size: 13px; cursor: pointer; outline: none;
+    }
+    #dist-plot { width: 100%; height: 400px; }
+    #cluster-plot { width: 100%; height: 500px; }
+
+    /* ── Modal ────────────────────────────────────────────────────────────── */
+    .modal-backdrop {
+      display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.75);
+      z-index: 100; align-items: center; justify-content: center;
+    }
+    .modal-backdrop.open { display: flex; }
+    .modal {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 12px; padding: 24px; max-width: 700px; width: 94%;
+      max-height: 90vh; overflow-y: auto; position: relative;
+    }
+    .modal-close {
+      position: absolute; top: 14px; right: 16px;
+      background: none; border: none; color: var(--muted);
+      font-size: 20px; cursor: pointer; line-height: 1;
+    }
+    .modal-close:hover { color: var(--text); }
+    .modal-header { display: flex; gap: 16px; margin-bottom: 20px; flex-wrap: wrap; }
+    .modal-img { width: 280px; max-width: 100%; border-radius: var(--radius); object-fit: cover; flex-shrink: 0; }
+    .modal-scores { flex: 1; min-width: 200px; }
+    .modal-scores h3 { font-size: 15px; font-weight: 700; margin-bottom: 12px; }
+    .modal-why {
+      margin-top: 10px; padding: 10px 14px;
+      background: var(--surface2); border-radius: var(--radius);
+      font-size: 12px; color: var(--muted); line-height: 1.5;
+    }
+
+    /* CSS bar chart */
+    .score-bars { display: flex; flex-direction: column; gap: 10px; }
+    .score-row { display: flex; flex-direction: column; gap: 4px; }
+    .score-row-label { font-size: 12px; color: var(--muted); display: flex; justify-content: space-between; }
+    .score-row-label span { font-weight: 600; color: var(--text); }
+    .bar-bg { background: var(--surface2); border-radius: 4px; height: 10px; overflow: hidden; }
+    .bar-fill { height: 100%; border-radius: 4px; transition: width 0.4s ease; }
+    .bar-tech { background: var(--accent); }
+    .bar-aes  { background: var(--accent2); }
+    .bar-obj  { background: var(--green); }
+    .bar-agg  { background: var(--yellow); }
+
+    /* ── Empty / Loading States ───────────────────────────────────────────── */
+    .empty-state {
+      text-align: center; padding: 60px 20px; color: var(--muted);
+    }
+    .empty-state .big { font-size: 40px; margin-bottom: 12px; }
+    .empty-state p { font-size: 14px; line-height: 1.6; }
+
+    /* ── Scrollbar ────────────────────────────────────────────────────────── */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: var(--bg); }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  </style>
+</head>
+<body>
+
+<!-- ── Header ──────────────────────────────────────────────────────────────── -->
+<div class="header">
+  <h1>ThirdEye — Hiking Memory Curation</h1>
+</div>
+
+<!-- ── Controls ────────────────────────────────────────────────────────────── -->
+<div class="controls">
+  <div class="run-row">
+    <input type="file" id="zip-file" accept=".zip" style="display:none" onchange="onFileSelected(this)" />
+    <button class="btn" id="pick-btn"
+      style="background:var(--surface2);border:1px solid var(--border);color:var(--text);"
+      onclick="document.getElementById('zip-file').click()">
+      Choose .zip…
+    </button>
+    <span id="file-label" style="flex:1;font-size:13px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+      No file selected
+    </span>
+    <button class="btn btn-primary" id="run-btn" onclick="startPipeline()" disabled>Run Pipeline</button>
+  </div>
+
+  <div class="progress-wrap" id="progress-wrap">
+    <div class="progress-label">
+      <span id="stage-label">Starting…</span>
+      <span id="progress-pct">0%</span>
+    </div>
+    <div class="progress-bar-bg">
+      <div class="progress-bar-fill" id="progress-fill" style="width:0%"></div>
+    </div>
+    <div class="progress-error" id="progress-error" style="display:none"></div>
+  </div>
+</div>
+
+<!-- ── Epsilon Slider ──────────────────────────────────────────────────────── -->
+<div class="epsilon-section" id="epsilon-section">
+  <div class="epsilon-stats-row">
+    <div class="stat-chip">
+      <span class="stat-chip-label">Clusters</span>
+      <span class="stat-chip-value" id="cluster-count">—</span>
+    </div>
+    <div class="stat-chip">
+      <span class="stat-chip-label">One-offs</span>
+      <span class="stat-chip-value" id="noise-count">—</span>
+    </div>
+    <div class="stat-chip">
+      <span class="stat-chip-label">Champions</span>
+      <span class="stat-chip-value" id="champ-count">—</span>
+    </div>
+  </div>
+  <div class="epsilon-row">
+    <span class="epsilon-label">Epsilon</span>
+    <span class="epsilon-range-bound">0.01</span>
+    <input type="range" id="epsilon-slider" min="0.01" max="0.50" step="0.01" value="0.12" />
+    <span class="epsilon-range-bound">0.50</span>
+    <span class="epsilon-val" id="epsilon-display">0.12</span>
+    <span class="epsilon-hint">merge threshold</span>
+  </div>
+  <div class="epsilon-row">
+    <span class="epsilon-label">Min cluster</span>
+    <span class="epsilon-range-bound">2</span>
+    <input type="range" id="mcs-slider" min="2" max="30" step="1" value="2" />
+    <span class="epsilon-range-bound">30</span>
+    <span class="epsilon-val" id="mcs-display">2</span>
+    <span class="epsilon-hint">images needed to form a cluster</span>
+  </div>
+  <div class="toggle-row">
+    <label class="toggle-switch">
+      <input type="checkbox" id="ignore-obj-toggle" onchange="triggerRecluster()" />
+      <span class="toggle-slider"></span>
+    </label>
+    <span class="toggle-label">Ignore object-based model (scenic score) — use aesthetic score only</span>
+  </div>
+  <div class="recluster-banner" id="recluster-banner">
+    ⚠ Server was restarted — pipeline state was lost. Please re-run the pipeline to use the sliders.
+  </div>
+</div>
+
+<!-- ── Tabs ─────────────────────────────────────────────────────────────────── -->
+<div class="tabs" id="tabs-bar" style="display:none">
+  <button class="tab-btn active" onclick="switchTab('champions', this)">Champions</button>
+  <button class="tab-btn" onclick="switchTab('cluster', this)">Cluster Map</button>
+  <button class="tab-btn" onclick="switchTab('distributions', this)">Score Distributions</button>
+  <button class="tab-btn" onclick="switchTab('rejected', this)">Rejected Images</button>
+</div>
+
+<!-- ── Tab: Champions ──────────────────────────────────────────────────────── -->
+<div class="tab-content active" id="tab-champions">
+  <div class="empty-state">
+    <div class="big">📁</div>
+    <p>Enter a zip file path above and click <strong>Run Pipeline</strong> to begin.</p>
+  </div>
+</div>
+
+<!-- ── Tab: Cluster Map ────────────────────────────────────────────────────── -->
+<div class="tab-content" id="tab-cluster">
+  <div id="cluster-plot"></div>
+</div>
+
+<!-- ── Tab: Score Distributions ───────────────────────────────────────────── -->
+<div class="tab-content" id="tab-distributions">
+  <div class="dist-controls">
+    <select id="dist-metric" onchange="renderDistribution()">
+      <option value="aes_norm">Aesthetic Score</option>
+      <option value="tech_norm">Technical Score</option>
+      <option value="obj_norm">Object Score</option>
+      <option value="aggregated_score">Aggregated Score</option>
+    </select>
+  </div>
+  <div id="dist-plot"></div>
+</div>
+
+<!-- ── Tab: Rejected Images ────────────────────────────────────────────────── -->
+<div class="tab-content" id="tab-rejected">
+  <div class="filter-row">
+    <button class="filter-btn active" onclick="setRejectedFilter('all', this)">All</button>
+    <button class="filter-btn" onclick="setRejectedFilter('tech_floor_penalty', this)">Tech Penalized</button>
+    <button class="filter-btn" onclick="setRejectedFilter('outscored_in_cluster', this)">Outscored in Cluster</button>
+    <button class="filter-btn" onclick="setRejectedFilter('noise_not_selected', this)">Noise / One-off</button>
+  </div>
+  <div id="rejected-grid"></div>
+</div>
+
+<!-- ── Modal ─────────────────────────────────────────────────────────────────── -->
+<div class="modal-backdrop" id="modal" onclick="closeModal(event)">
+  <div class="modal">
+    <button class="modal-close" onclick="closeModal()">×</button>
+    <div class="modal-header">
+      <img id="modal-img" class="modal-img" src="" alt="" />
+      <div class="modal-scores">
+        <h3 id="modal-title">—</h3>
+        <div class="score-bars" id="modal-bars"></div>
+        <div class="modal-why" id="modal-why"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── State ────────────────────────────────────────────────────────────────────
+let _allImages = [];        // full results array
+let _champions = [];        // champion indices
+let _rejectedFilter = 'all';
+let _pollTimer = null;
+let _debounceTimer = null;
+let _clusterPlotReady = false;
+let _distPlotReady = false;
+
+// Plotly 2.x removed d3 color scales — use a fixed palette
+const CLUSTER_COLORS = [
+  '#5b8dee','#a78bfa','#34d399','#fbbf24','#f87171','#38bdf8',
+  '#fb923c','#e879f9','#4ade80','#facc15','#f472b6','#60a5fa',
+  '#c084fc','#2dd4bf','#fb7185','#a3e635','#818cf8','#f97316',
+];
+
+// ── File Picker ───────────────────────────────────────────────────────────────
+function onFileSelected(input) {
+  const file = input.files[0];
+  if (file) {
+    document.getElementById('file-label').textContent = file.name;
+    document.getElementById('file-label').style.color = 'var(--text)';
+    document.getElementById('run-btn').disabled = false;
+  }
+}
+
+// ── Pipeline Run ─────────────────────────────────────────────────────────────
+async function startPipeline() {
+  const fileInput = document.getElementById('zip-file');
+  if (!fileInput.files[0]) return;
+  const epsilon = 0.12;
+
+  document.getElementById('run-btn').disabled = true;
+  document.getElementById('pick-btn').disabled = true;
+  showProgress(true);
+  hideResults();
+
+  const mcs = parseInt(document.getElementById('mcs-slider').value) || 2;
+
+  const formData = new FormData();
+  formData.append('file', fileInput.files[0]);
+  formData.append('epsilon', epsilon);
+  formData.append('min_cluster_size', mcs);
+
+  try {
+    const res = await fetch('/run', {
+      method: 'POST',
+      body: formData,
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      showError(err.detail || 'Failed to start pipeline');
+      document.getElementById('run-btn').disabled = false;
+      document.getElementById('pick-btn').disabled = false;
+      return;
+    }
+  } catch (e) {
+    showError('Could not reach server. Is uvicorn running?');
+    document.getElementById('run-btn').disabled = false;
+    document.getElementById('pick-btn').disabled = false;
+    return;
+  }
+
+  _pollTimer = setInterval(pollStatus, 600);
+}
+
+async function pollStatus() {
+  try {
+    const res = await fetch('/status');
+    const data = await res.json();
+
+    // Update progress bar
+    const pct = data.pct || 0;
+    document.getElementById('progress-fill').style.width = pct + '%';
+    document.getElementById('progress-pct').textContent = pct.toFixed(1) + '%';
+
+    let label = data.stage_label || data.stage;
+    if (data.stage === 'scoring' && data.images_total > 0) {
+      label += ` (${data.images_done} / ${data.images_total})`;
+    }
+    document.getElementById('stage-label').textContent = label;
+
+    if (data.status === 'done') {
+      clearInterval(_pollTimer);
+      await loadResults();
+      document.getElementById('run-btn').disabled = false;
+      document.getElementById('pick-btn').disabled = false;
+    } else if (data.status === 'error') {
+      clearInterval(_pollTimer);
+      showError(data.error || 'Unknown error');
+      document.getElementById('run-btn').disabled = false;
+      document.getElementById('pick-btn').disabled = false;
+    }
+  } catch (e) {
+    // server may be briefly unavailable during model loading — keep polling
+  }
+}
+
+// ── Load & Render Results ─────────────────────────────────────────────────────
+async function loadResults() {
+  const res = await fetch('/results');
+  if (!res.ok) return;
+  const data = await res.json();
+  storeResults(data);
+  renderAll();
+  showResults(data.epsilon);
+}
+
+function storeResults(data) {
+  _allImages = data.images;
+  _champions = data.champions;
+  updateClusterStats(data.cluster_count, data.noise_count, _champions.length);
+  document.getElementById('epsilon-slider').value = data.epsilon;
+  document.getElementById('epsilon-display').textContent = parseFloat(data.epsilon).toFixed(2);
+  if (data.min_cluster_size != null) {
+    document.getElementById('mcs-slider').value = data.min_cluster_size;
+    document.getElementById('mcs-display').textContent = data.min_cluster_size;
+  }
+  if (data.ignore_object != null) {
+    document.getElementById('ignore-obj-toggle').checked = data.ignore_object;
+  }
+}
+
+function renderAll() {
+  renderChampions();
+  renderRejected();
+  // Plotly charts are rendered lazily when their tab is first shown
+  // so they get correct dimensions — see switchTab()
+  _clusterPlotReady = false;
+  _distPlotReady = false;
+}
+
+// ── Champions Tab ─────────────────────────────────────────────────────────────
+function renderChampions() {
+  const champs = _allImages.filter(img => img.is_champion);
+  champs.sort((a, b) => b.aggregated_score - a.aggregated_score);
+  const grid = buildImageGrid(champs);
+  const tab = document.getElementById('tab-champions');
+  tab.innerHTML = '';
+  if (champs.length === 0) {
+    tab.innerHTML = '<div class="empty-state"><div class="big">🏆</div><p>No champions selected.</p></div>';
+    return;
+  }
+  tab.appendChild(grid);
+}
+
+// ── Cluster Map Tab ───────────────────────────────────────────────────────────
+function renderClusterMap() {
+  const clusterIds = [...new Set(_allImages.map(img => img.cluster_id))];
+  const traces = [];
+
+  // Separate noise from real clusters
+  const clusters = clusterIds.filter(id => id !== -1).sort((a, b) => a - b);
+  const noiseImages = _allImages.filter(img => img.cluster_id === -1 && !img.is_champion);
+
+  // One trace per cluster
+  clusters.forEach((cid, i) => {
+    const imgs = _allImages.filter(img => img.cluster_id === cid && !img.is_champion);
+    if (imgs.length === 0) return;
+    traces.push({
+      type: 'scattergl',
+      mode: 'markers',
+      name: `Cluster ${cid}`,
+      x: imgs.map(img => img.tsne_x),
+      y: imgs.map(img => img.tsne_y),
+      customdata: imgs.map(img => [img.idx, img.filename, img.aggregated_score.toFixed(2)]),
+      hovertemplate: '<b>%{customdata[1]}</b><br>Agg: %{customdata[2]}<br>Cluster: ' + cid + '<extra></extra>',
+      marker: { color: CLUSTER_COLORS[i % CLUSTER_COLORS.length], size: 6, opacity: 0.75 },
+    });
+  });
+
+  // Noise trace
+  if (noiseImages.length > 0) {
+    traces.push({
+      type: 'scattergl',
+      mode: 'markers',
+      name: 'Noise (one-off)',
+      x: noiseImages.map(img => img.tsne_x),
+      y: noiseImages.map(img => img.tsne_y),
+      customdata: noiseImages.map(img => [img.idx, img.filename, img.aggregated_score.toFixed(2)]),
+      hovertemplate: '<b>%{customdata[1]}</b><br>Agg: %{customdata[2]}<br>One-off<extra></extra>',
+      marker: { color: '#555', size: 5, opacity: 0.5 },
+    });
+  }
+
+  // Champions overlay
+  const champImgs = _allImages.filter(img => img.is_champion);
+  traces.push({
+    type: 'scattergl',
+    mode: 'markers+text',
+    name: 'Champions',
+    x: champImgs.map(img => img.tsne_x),
+    y: champImgs.map(img => img.tsne_y),
+    customdata: champImgs.map(img => [img.idx, img.filename, img.aggregated_score.toFixed(2)]),
+    hovertemplate: '<b>%{customdata[1]}</b><br>Agg: %{customdata[2]}<br>★ Champion<extra></extra>',
+    marker: { color: '#fbbf24', symbol: 'star', size: 14, line: { color: '#000', width: 1 } },
+  });
+
+  const layout = {
+    paper_bgcolor: '#1a1d27',
+    plot_bgcolor:  '#1a1d27',
+    font: { color: '#e2e8f0', size: 12 },
+    xaxis: { showgrid: false, zeroline: false, showticklabels: false, title: 't-SNE Axis 1' },
+    yaxis: { showgrid: false, zeroline: false, showticklabels: false, title: 't-SNE Axis 2' },
+    legend: { bgcolor: 'rgba(0,0,0,0.3)', bordercolor: '#2e3247', borderwidth: 1 },
+    margin: { t: 20, l: 40, r: 20, b: 40 },
+    hovermode: 'closest',
+  };
+
+  if (!_clusterPlotReady) {
+    Plotly.newPlot('cluster-plot', traces, layout, { responsive: true });
+    document.getElementById('cluster-plot').on('plotly_click', (evt) => {
+      const pt = evt.points[0];
+      if (pt && pt.customdata) openModal(_allImages[pt.customdata[0]]);
+    });
+    _clusterPlotReady = true;
+  } else {
+    Plotly.react('cluster-plot', traces, layout);
+  }
+}
+
+// ── Score Distributions Tab ───────────────────────────────────────────────────
+function renderDistribution() {
+  const metric = document.getElementById('dist-metric').value;
+  const allVals = _allImages.map(img => img[metric]);
+  const champVals = _allImages.filter(img => img.is_champion).map(img => img[metric]);
+
+  const metricLabels = {
+    aes_norm: 'Aesthetic Score (normalized)',
+    tech_norm: 'Technical Score (normalized)',
+    obj_norm: 'Object Score (normalized)',
+    aggregated_score: 'Aggregated Score',
+  };
+
+  const traces = [
+    {
+      type: 'histogram',
+      x: allVals,
+      name: 'All Images',
+      histnorm: 'probability density',
+      opacity: 0.6,
+      marker: { color: '#5b8dee' },
+      nbinsx: 40,
+    },
+    {
+      type: 'histogram',
+      x: champVals,
+      name: 'Champions',
+      histnorm: 'probability density',
+      opacity: 0.8,
+      marker: { color: '#fbbf24' },
+      nbinsx: 20,
+    },
+    // Rug trace for individual champion positions
+    {
+      type: 'scatter',
+      mode: 'markers',
+      x: champVals,
+      y: champVals.map(() => 0),
+      name: 'Champion positions',
+      marker: { symbol: 'line-ns', color: '#fbbf24', size: 12, line: { color: '#fbbf24', width: 2 } },
+      showlegend: false,
+      hoverinfo: 'x',
+    },
+  ];
+
+  const layout = {
+    barmode: 'overlay',
+    paper_bgcolor: '#1a1d27',
+    plot_bgcolor: '#1a1d27',
+    font: { color: '#e2e8f0', size: 12 },
+    xaxis: { title: metricLabels[metric] || metric, gridcolor: '#2e3247' },
+    yaxis: { title: 'Density', gridcolor: '#2e3247' },
+    legend: { bgcolor: 'rgba(0,0,0,0.3)', bordercolor: '#2e3247', borderwidth: 1 },
+    margin: { t: 20, l: 60, r: 20, b: 60 },
+  };
+
+  if (!_distPlotReady) {
+    Plotly.newPlot('dist-plot', traces, layout, { responsive: true });
+    _distPlotReady = true;
+  } else {
+    Plotly.react('dist-plot', traces, layout);
+  }
+}
+
+// ── Rejected Images Tab ───────────────────────────────────────────────────────
+function renderRejected() {
+  let rejected = _allImages.filter(img => !img.is_champion);
+  if (_rejectedFilter !== 'all') {
+    rejected = rejected.filter(img => img.rejection_reason === _rejectedFilter);
+  }
+  rejected.sort((a, b) => b.aggregated_score - a.aggregated_score);
+  const grid = buildImageGrid(rejected);
+  const container = document.getElementById('rejected-grid');
+  container.innerHTML = '';
+  container.appendChild(grid);
+}
+
+function setRejectedFilter(filter, btn) {
+  _rejectedFilter = filter;
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  renderRejected();
+}
+
+// ── Image Card Builder ────────────────────────────────────────────────────────
+function buildImageGrid(images) {
+  const grid = document.createElement('div');
+  grid.className = 'image-grid';
+
+  images.forEach(img => {
+    const card = document.createElement('div');
+    card.className = 'img-card';
+    card.onclick = () => openModal(img);
+
+    const imgEl = document.createElement('img');
+    imgEl.src = `/images/${encodeURIComponent(img.filename)}`;
+    imgEl.alt = img.filename;
+    imgEl.loading = 'lazy';
+
+    const meta = document.createElement('div');
+    meta.className = 'img-card-meta';
+
+    const score = document.createElement('div');
+    score.className = 'img-score';
+    score.textContent = img.aggregated_score.toFixed(2);
+
+    const badges = document.createElement('div');
+    badges.className = 'img-badges';
+
+    if (img.is_champion) {
+      badges.appendChild(makeBadge('★ Champion', 'badge-champion'));
+    }
+    if (img.cluster_id === -1) {
+      badges.appendChild(makeBadge('One-off', 'badge-noise'));
+    } else {
+      badges.appendChild(makeBadge(`C${img.cluster_id}`, 'badge-cluster'));
+    }
+    if (img.rejection_reason === 'tech_floor_penalty') {
+      badges.appendChild(makeBadge('Tech ↓', 'badge-tech'));
+    } else if (img.rejection_reason === 'outscored_in_cluster') {
+      badges.appendChild(makeBadge('Outscored', 'badge-outscored'));
+    }
+
+    meta.appendChild(score);
+    meta.appendChild(badges);
+    card.appendChild(imgEl);
+    card.appendChild(meta);
+    grid.appendChild(card);
+  });
+
+  return grid;
+}
+
+function makeBadge(text, cls) {
+  const b = document.createElement('span');
+  b.className = `badge ${cls}`;
+  b.textContent = text;
+  return b;
+}
+
+// ── Modal ─────────────────────────────────────────────────────────────────────
+function openModal(img) {
+  document.getElementById('modal-img').src = `/images/${encodeURIComponent(img.filename)}`;
+  document.getElementById('modal-title').textContent = img.filename;
+
+  const scores = [
+    { label: 'Technical',   value: img.tech_norm,          max: 10, cls: 'bar-tech' },
+    { label: 'Aesthetic',   value: img.aes_norm,           max: 10, cls: 'bar-aes' },
+    { label: 'Object',      value: img.obj_norm,           max: 10, cls: 'bar-obj' },
+    { label: 'Aggregated',  value: img.aggregated_score,   max: 10, cls: 'bar-agg' },
+  ];
+
+  const barsEl = document.getElementById('modal-bars');
+  barsEl.innerHTML = '';
+  scores.forEach(s => {
+    const row = document.createElement('div');
+    row.className = 'score-row';
+    row.innerHTML = `
+      <div class="score-row-label">${s.label}<span>${s.value.toFixed(2)}</span></div>
+      <div class="bar-bg"><div class="bar-fill ${s.cls}" style="width:${(s.value/s.max*100).toFixed(1)}%"></div></div>
+    `;
+    barsEl.appendChild(row);
+  });
+
+  const whyEl = document.getElementById('modal-why');
+  if (img.is_champion) {
+    const clusterText = img.cluster_id === -1
+      ? 'Selected as a one-off (noise) image with a high score.'
+      : `Top scorer in Cluster ${img.cluster_id}.`;
+    whyEl.innerHTML = `<strong>★ Champion.</strong> ${clusterText}`;
+  } else if (img.rejection_reason === 'outscored_in_cluster') {
+    const winner = _allImages.find(i => i.cluster_id === img.cluster_id && i.is_champion);
+    whyEl.innerHTML = '';
+    const msg = document.createElement('span');
+    msg.textContent = `Rejected: outscored by another image in Cluster ${img.cluster_id}. `;
+    whyEl.appendChild(msg);
+    if (winner) {
+      const link = document.createElement('button');
+      link.textContent = `View winning image →`;
+      link.style.cssText = 'background:none;border:none;color:var(--accent);font-size:12px;cursor:pointer;padding:0;text-decoration:underline;';
+      link.onclick = () => openModal(winner);
+      whyEl.appendChild(link);
+    }
+  } else {
+    const reasons = {
+      tech_floor_penalty: 'Rejected: technical quality score too low (sharpness / exposure).',
+      noise_not_selected: 'Rejected: unique scene (no cluster), not in top selections.',
+    };
+    whyEl.innerHTML = reasons[img.rejection_reason] || 'Not selected.';
+  }
+
+  document.getElementById('modal').classList.add('open');
+}
+
+function closeModal(event) {
+  if (!event || event.target === document.getElementById('modal') || event.target.classList.contains('modal-close')) {
+    document.getElementById('modal').classList.remove('open');
+  }
+}
+
+// ── Sliders ───────────────────────────────────────────────────────────────────
+function triggerRecluster() {
+  const eps = parseFloat(document.getElementById('epsilon-slider').value);
+  const mcs = parseInt(document.getElementById('mcs-slider').value);
+  const ignoreObj = document.getElementById('ignore-obj-toggle').checked;
+  clearTimeout(_debounceTimer);
+  _debounceTimer = setTimeout(() => recluster(eps, mcs, ignoreObj), 300);
+}
+
+document.getElementById('epsilon-slider').addEventListener('input', function() {
+  document.getElementById('epsilon-display').textContent = parseFloat(this.value).toFixed(2);
+  triggerRecluster();
+});
+
+document.getElementById('mcs-slider').addEventListener('input', function() {
+  document.getElementById('mcs-display').textContent = this.value;
+  triggerRecluster();
+});
+
+async function recluster(epsilon, minClusterSize, ignoreObject) {
+  try {
+    const res = await fetch('/recluster', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ epsilon, min_cluster_size: minClusterSize, ignore_object: ignoreObject }),
+    });
+    if (res.status === 404) {
+      document.getElementById('recluster-banner').classList.add('visible');
+      return;
+    }
+    if (!res.ok) return;
+    const data = await res.json();
+
+    // Apply updates to _allImages
+    const updateMap = {};
+    data.updates.forEach(u => { updateMap[u.idx] = u; });
+    _allImages.forEach(img => {
+      const u = updateMap[img.idx];
+      if (u) {
+        img.aggregated_score = u.aggregated_score;
+        img.cluster_id = u.cluster_id;
+        img.is_champion = u.is_champion;
+        img.rejection_reason = u.rejection_reason;
+      }
+    });
+    _champions = data.champions;
+
+    updateClusterStats(data.cluster_count, data.noise_count, _champions.length);
+
+    // Re-render affected views
+    renderChampions();
+    renderRejected();
+    if (_clusterPlotReady) renderClusterMap();
+    if (_distPlotReady) renderDistribution();  // champion overlay changes
+  } catch (e) {
+    console.error('Recluster failed:', e);
+  }
+}
+
+// ── Tabs ──────────────────────────────────────────────────────────────────────
+function switchTab(name, btn) {
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById(`tab-${name}`).classList.add('active');
+
+  if (name === 'cluster') {
+    if (_allImages.length > 0 && !_clusterPlotReady) {
+      renderClusterMap();   // first visit — render now that div is visible
+    } else if (_clusterPlotReady) {
+      Plotly.Plots.resize(document.getElementById('cluster-plot'));
+    }
+  }
+  if (name === 'distributions') {
+    if (_allImages.length > 0 && !_distPlotReady) {
+      renderDistribution(); // first visit
+    } else if (_distPlotReady) {
+      Plotly.Plots.resize(document.getElementById('dist-plot'));
+    }
+  }
+}
+
+// ── UI Helpers ────────────────────────────────────────────────────────────────
+function showProgress(visible) {
+  document.getElementById('progress-wrap').classList.toggle('visible', visible);
+}
+
+function showError(msg) {
+  const errEl = document.getElementById('progress-error');
+  errEl.textContent = msg;
+  errEl.style.display = 'block';
+}
+
+function updateClusterStats(clusterCount, noiseCount, champCount) {
+  document.getElementById('cluster-count').textContent = clusterCount;
+  document.getElementById('noise-count').textContent = noiseCount;
+  document.getElementById('champ-count').textContent = champCount;
+}
+
+function showResults(epsilon) {
+  document.getElementById('epsilon-section').classList.add('visible');
+  document.getElementById('tabs-bar').style.display = 'flex';
+  document.getElementById('progress-error').style.display = 'none';
+  document.getElementById('epsilon-slider').value = epsilon;
+  document.getElementById('epsilon-display').textContent = parseFloat(epsilon).toFixed(2);
+}
+
+function hideResults() {
+  document.getElementById('epsilon-section').classList.remove('visible');
+  document.getElementById('tabs-bar').style.display = 'none';
+  document.getElementById('progress-error').style.display = 'none';
+  document.getElementById('recluster-banner').classList.remove('visible');
+  _clusterPlotReady = false;
+  _distPlotReady = false;
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+// Check if a run already completed (e.g., page refresh after done)
+(async () => {
+  try {
+    const res = await fetch('/status');
+    const data = await res.json();
+    if (data.status === 'done') {
+      showProgress(true);
+      document.getElementById('stage-label').textContent = 'Done';
+      document.getElementById('progress-fill').style.width = '100%';
+      document.getElementById('progress-pct').textContent = '100%';
+      await loadResults();
+    } else if (data.status === 'running') {
+      showProgress(true);
+      _pollTimer = setInterval(pollStatus, 600);
+      document.getElementById('run-btn').disabled = true;
+    }
+  } catch (e) { /* server not ready yet */ }
+})();
+</script>
+</body>
+</html>
