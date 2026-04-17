@@ -896,6 +896,7 @@ function triggerRecluster() {
   const eps = parseFloat(document.getElementById('epsilon-slider').value);
   const mcs = parseInt(document.getElementById('mcs-slider').value);
   const ignoreObj = document.getElementById('ignore-obj-toggle').checked;
+  console.log(`Triggering recluster: epsilon=${eps}, min_cluster=${mcs}, ignore_object=${ignoreObj}`);
   clearTimeout(_debounceTimer);
   _debounceTimer = setTimeout(() => recluster(eps, mcs, ignoreObj), 300);
 }

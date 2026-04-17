@@ -401,6 +401,22 @@ async def recluster(request: ReclusterRequest) -> dict:
         # Import pipeline utilities for local reclustering
         import pipeline as pl
         
+        # Recalculate aggregated_score based on ignore_object parameter
+        # Constants from cloud service
+        W_AES = 0.6
+        W_OBJ = 0.4
+        TECH_FLOOR = 3.0
+        
+        if request.ignore_object:
+            df["aggregated_score"] = df["aes_norm"]
+        else:
+            df["aggregated_score"] = W_AES * df["aes_norm"] + W_OBJ * df["obj_norm"]
+        
+        # Apply tech floor penalty
+        tech_penalized = df["tech_norm"] < TECH_FLOOR
+        df.loc[tech_penalized, "aggregated_score"] *= 0.5
+        df["tech_penalized"] = tech_penalized
+        
         # Re-cluster with new parameters
         df = pl.run_clustering(embeddings, df, request.epsilon, request.min_cluster_size)
         df = pl.select_champions(df)
@@ -430,6 +446,8 @@ async def recluster(request: ReclusterRequest) -> dict:
         # Count clusters and noise
         cluster_count = int(df[df["cluster_id"] >= 0]["cluster_id"].nunique())
         noise_count = int((df["cluster_id"] == -1).sum())
+        
+        logger.info(f"Recluster: eps={request.epsilon}, mcs={request.min_cluster_size}, ignore_obj={request.ignore_object} -> {cluster_count} clusters, {len(champions)} champions")
         
         return {
             "updates": updates,
