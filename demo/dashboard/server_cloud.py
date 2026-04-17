@@ -48,12 +48,17 @@ CLOUD_SERVICE_URL = os.getenv("CLOUD_SERVICE_URL", "http://localhost:8001")
 cloud_client = CloudServiceClient(base_url=CLOUD_SERVICE_URL)
 
 _STAGE_LABELS = {
+    "pending": "Preparing inference",
     "extracting": "Uploading to cloud",
     "loading_models": "Loading ML models on cloud",
     "scoring": "Scoring images (tech + aes + obj)",
     "clustering": "Clustering embeddings (HDBSCAN)",
+    "converting": "Converting results",
+    "saving": "Saving embeddings",
+    "retrieving": "Retrieving results from cloud",
     "tsne": "Computing t-SNE projection",
     "selecting": "Selecting champions",
+    "completed": "Inference completed on cloud",
     "done": "Done",
     "error": "Error",
     "idle": "Idle",
@@ -104,6 +109,12 @@ def _update_state(**kwargs: Any) -> None:
 
 def _get_state() -> dict[str, Any]:
     with _state_lock:
+        # Calculate progress percentage
+        if _state.images_total > 0:
+            pct = round((_state.images_done / _state.images_total) * 100)
+        else:
+            pct = 0
+        
         return {
             "status": _state.status,
             "stage": _state.stage,
@@ -111,6 +122,7 @@ def _get_state() -> dict[str, Any]:
             "stage_index": _state.stage_index,
             "images_done": _state.images_done,
             "images_total": _state.images_total,
+            "pct": pct,
             "error": _state.error,
             "run_id": _state.run_id,
         }
@@ -143,22 +155,70 @@ async def _async_infer_and_poll(
         Path(zip_path).unlink(missing_ok=True)
         
         # Stage 2-6: Wait for cloud service to complete
+        # Stage 2-6: Trigger inference on cloud service (returns immediately with 202)
         logger.info(f"Triggering inference on cloud service")
         _update_state(stage="loading_models", stage_index=2)
         
-        infer_resp = await cloud_client.run_inference(
-            run_id=run_id,
-            epsilon=epsilon,
-            min_cluster_size=min_cluster_size,
-            ignore_object=ignore_object,
-        )
+        # Call /infer but DON'T wait for response - it returns 202 Accepted immediately
+        print(f"\n\n📡 CALLING /infer endpoint (should return immediately with 202)\n")
+        try:
+            infer_resp = await cloud_client.run_inference(
+                run_id=run_id,
+                epsilon=epsilon,
+                min_cluster_size=min_cluster_size,
+                ignore_object=ignore_object,
+            )
+            print(f"✅ /infer response received: {infer_resp}\n")
+            logger.info(f"Inference triggered response: {infer_resp}")
+        except Exception as e:
+            print(f"⚠️  /infer call failed (but inference may still be running): {e}\n")
+            logger.warning(f"Inference trigger warning: {e}")
         
-        logger.info(f"Inference response: {infer_resp}")
-        champion_count = infer_resp.get("champion_count", 0)
+        # Poll for progress from cloud service during inference
+        # This should start immediately now that /infer returns 202
+        print(f"\n🚀🚀🚀 STARTING PROGRESS POLL for run {run_id} 🚀🚀🚀\n")
+        logger.info(f"🚀 STARTING PROGRESS POLL for run {run_id}")
+        max_wait = 3600  # 1 hour timeout
+        elapsed = 0
+        poll_interval = 1  # Check every second
+        poll_count = 0
         
-        # Poll for results (cloud may still be processing)
-        _update_state(stage="selecting", stage_index=5)
-        results = await cloud_client.wait_for_results(run_id, max_wait_seconds=3600, poll_interval=2)
+        while elapsed < max_wait:
+            poll_count += 1
+            try:
+                print(f"  [Poll #{poll_count}] Requesting progress... (elapsed: {elapsed}s)")
+                progress = await cloud_client.get_progress(run_id)
+                stage = progress.get("stage", "unknown")
+                images_done = progress.get("images_done", 0)
+                images_total = progress.get("images_total", file_count)
+                percent = progress.get("percent_complete", 0)
+                
+                print(f"  [Poll #{poll_count}] ✓ Got: {stage} - {images_done}/{images_total} ({percent}%)")
+                logger.info(f"📊 CLOUD PROGRESS: {stage} - {images_done}/{images_total} ({percent}%)")
+                
+                # Map cloud stages to dashboard stages
+                if stage == "scoring":
+                    _update_state(stage="scoring", stage_index=3, images_done=images_done, images_total=images_total)
+                elif stage == "converting":
+                    _update_state(stage="clustering", stage_index=4, images_done=images_total, images_total=images_total)
+                elif stage == "saving":
+                    _update_state(stage="selecting", stage_index=5, images_done=images_total, images_total=images_total)
+                elif stage == "completed":
+                    print(f"  [Poll #{poll_count}] ✅ Inference COMPLETED")
+                    logger.info(f"✅ Inference completed on cloud service")
+                    break
+                
+            except Exception as e:
+                print(f"  [Poll #{poll_count}] ❌ ERROR: {e}")
+                logger.error(f"❌ Error polling progress: {e}", exc_info=True)
+            
+            
+            await asyncio.sleep(poll_interval)
+            elapsed += poll_interval
+        
+        # Poll for results (cloud may still be writing to disk)
+        _update_state(stage="retrieving", stage_index=5.5)
+        results = await cloud_client.wait_for_results(run_id, max_wait_seconds=120, poll_interval=2)
         
         if not results:
             raise Exception("Timeout waiting for inference results from cloud service")

@@ -77,6 +77,26 @@ class CloudServiceClient:
             logger.error(f"Failed to get status: {e}")
             raise
 
+    async def get_progress(self, run_id: str) -> dict[str, Any]:
+        """Get real-time inference progress from cloud service."""
+        try:
+            url = f"{self.base_url}/progress/{run_id}"
+            logger.info(f"📡 Requesting progress from: {url}")
+            response = await self.client.get(url)
+            response.raise_for_status()
+            data = response.json()
+            logger.info(f"📡 Got progress: {data}")
+            return data
+        except Exception as e:
+            logger.warning(f"❌ Failed to get progress from {self.base_url}/progress/{run_id}: {e}")
+            # Return default progress if cloud service doesn't have it yet
+            return {
+                "stage": "pending",
+                "images_done": 0,
+                "images_total": 0,
+                "percent_complete": 0,
+            }
+
     async def get_results(self, run_id: str) -> dict[str, Any]:
         """Get inference results for a run."""
         try:

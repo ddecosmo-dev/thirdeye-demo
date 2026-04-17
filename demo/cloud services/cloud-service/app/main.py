@@ -49,9 +49,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Global models cache
+# Global models cache and progress tracking
 _MODELS_CACHE = None
 _DEVICE = "cpu"  # Will be set at startup
+_RUN_PROGRESS = {}  # {run_id: {"stage": str, "images_done": int, "images_total": int}}
 
 @app.on_event("startup")
 async def startup_event():
@@ -199,17 +200,104 @@ async def get_run(run_id: str) -> dict[str, Any]:
     return meta
 
 
+# ─── Background Inference Task ────────────────────────────────────────────────
+async def _run_inference_background(
+    run_id: str,
+    image_paths: list[Path],
+    epsilon: float,
+    min_cluster_size: int,
+    ignore_object: bool,
+    device: str,
+) -> None:
+    """Run inference in background and update _RUN_PROGRESS."""
+    try:
+        # Define progress callback
+        def progress_callback(done: int, total: int):
+            global _RUN_PROGRESS
+            _RUN_PROGRESS[run_id] = {
+                "stage": "scoring",
+                "images_done": done,
+                "images_total": total,
+            }
+            # Only log every 10 images or on the last one
+            if done % 10 == 0 or done == total:
+                pct = int((done / max(total, 1)) * 100)
+                logger.info(f"Progress: {done}/{total} images scored ({pct}%) for run {run_id}")
+        
+        def _run_inference_sync() -> dict:
+            runner = InferenceRunner(device=device, pre_loaded_models=_MODELS_CACHE)
+            return runner.run(
+                image_paths=image_paths,
+                epsilon=epsilon,
+                min_cluster_size=min_cluster_size,
+                ignore_object=ignore_object,
+                progress_cb=progress_callback,
+            )
+        
+        # Initialize progress
+        _RUN_PROGRESS[run_id] = {"stage": "scoring", "images_done": 0, "images_total": len(image_paths)}
+        
+        # Run inference in thread
+        results = await asyncio.to_thread(_run_inference_sync)
+        
+        # Convert results to JSON-serializable format
+        _RUN_PROGRESS[run_id] = {"stage": "converting", "images_done": len(image_paths), "images_total": len(image_paths)}
+        df = results["df"]
+        embeddings = results["embeddings"]
+        results_list = dataframe_to_results_json(df, embeddings)
+        
+        # Save embeddings separately for runtime TSNE computation
+        _RUN_PROGRESS[run_id] = {"stage": "saving", "images_done": len(image_paths), "images_total": len(image_paths)}
+        write_embeddings(run_id, embeddings)
+        logger.info(f"Saved {len(embeddings)} embeddings (shape: {embeddings.shape})")
+        
+        # Count champions
+        champion_count = int(df["is_final_selection"].sum())
+        
+        # Save results
+        results_data = {
+            "run_id": run_id,
+            "image_count": len(image_paths),
+            "champion_count": champion_count,
+            "inference_params": {
+                "epsilon": epsilon,
+                "min_cluster_size": min_cluster_size,
+                "ignore_object": ignore_object,
+                "device": device,
+            },
+            "results": results_list,
+        }
+        
+        write_results(run_id, results_data)
+        
+        logger.info(f"✅ Inference complete for run {run_id}: {champion_count} champions selected")
+        
+        # Mark as complete
+        _RUN_PROGRESS[run_id] = {"stage": "completed", "images_done": len(image_paths), "images_total": len(image_paths)}
+        
+        # Update metadata
+        meta = read_metadata(run_id) or {}
+        meta["status"] = "completed"
+        write_metadata(run_id, meta)
+        
+    except Exception as e:
+        logger.error(f"❌ Background inference failed for run {run_id}: {e}", exc_info=True)
+        _RUN_PROGRESS[run_id] = {"stage": "error", "images_done": 0, "images_total": 0}
+        meta = read_metadata(run_id) or {}
+        meta["status"] = "error"
+        meta["error"] = str(e)
+        write_metadata(run_id, meta)
+
+
 # ─── Inference Endpoint ───────────────────────────────────────────────────────
-@app.post("/infer", response_model=InferenceResponse)
-async def run_inference(payload: InferenceRequest) -> InferenceResponse:
+@app.post("/infer", status_code=202)
+async def run_inference(payload: InferenceRequest) -> dict[str, Any]:
     """
-    Run ML inference on images in a run.
-    
-    Performs scoring (technical, aesthetic, object), clustering, t-SNE,
-    and champion selection. Saves results to results.json.
+    Trigger ML inference on images in a run. Returns immediately (202 Accepted).
+    Actual inference runs in background. Poll /progress/{run_id} to track progress.
     """
     run_id = payload.run_id
-    logger.info(f"Inference request received for run_id: {run_id}")
+    logger.info(f"🚀 Inference request received for run_id: {run_id}")
     
     meta = read_metadata(run_id)
     if not meta:
@@ -251,65 +339,60 @@ async def run_inference(payload: InferenceRequest) -> InferenceResponse:
         device = _DEVICE
         logger.warning(f"🎮 Using startup device: {device}")
         
-        # Run inference in thread pool (non-blocking)
-        # Use pre-loaded models to avoid reloading in thread
-        def _run_inference_sync() -> dict:
-            runner = InferenceRunner(device=device, pre_loaded_models=_MODELS_CACHE)
-            return runner.run(
-                image_paths=image_paths,
-                epsilon=payload.epsilon,
-                min_cluster_size=payload.min_cluster_size,
-                ignore_object=payload.ignore_object,
-            )
-        
-        results = await asyncio.to_thread(_run_inference_sync)
-        
-        # Convert results to JSON-serializable format
-        df = results["df"]
-        embeddings = results["embeddings"]
-        results_list = dataframe_to_results_json(df, embeddings)
-        
-        # Save embeddings separately for runtime TSNE computation
-        write_embeddings(run_id, embeddings)
-        logger.info(f"Saved {len(embeddings)} embeddings (shape: {embeddings.shape})")
-        
-        # Count champions
-        champion_count = int(df["is_final_selection"].sum())
-        
-        # Save results
-        results_data = {
-            "run_id": run_id,
-            "image_count": len(image_paths),
-            "champion_count": champion_count,
-            "inference_params": {
-                "epsilon": payload.epsilon,
-                "min_cluster_size": payload.min_cluster_size,
-                "ignore_object": payload.ignore_object,
-                "device": device,
-            },
-            "results": results_list,
-        }
-        
-        write_results(run_id, results_data)
-        
-        logger.info(f"Inference complete for run {run_id}: {champion_count} champions selected")
-        
-        return InferenceResponse(
+        # Start background inference task - returns immediately
+        asyncio.create_task(_run_inference_background(
             run_id=run_id,
-            status="completed",
-            message=f"Inference complete: {champion_count} champions selected from {len(image_paths)} images",
-            image_count=len(image_paths),
-            champion_count=champion_count,
-            results_path=f"/runs/{run_id}/results.json",
-        )
+            image_paths=image_paths,
+            epsilon=payload.epsilon,
+            min_cluster_size=payload.min_cluster_size,
+            ignore_object=payload.ignore_object,
+            device=device,
+        ))
+        
+        # Return immediately with 202 Accepted
+        return {
+            "run_id": run_id,
+            "status": "accepted",
+            "message": f"Inference started for {len(image_paths)} images. Poll /progress/{run_id} to track progress.",
+            "image_count": len(image_paths),
+        }
     
     except Exception as e:
-        logger.error(f"Inference failed for run {run_id}: {e}", exc_info=True)
-        meta = read_metadata(run_id) or {}
-        meta["status"] = "error"
-        meta["error"] = str(e)
-        write_metadata(run_id, meta)
-        raise HTTPException(status_code=500, detail=f"Inference failed: {str(e)}")
+        logger.error(f"Failed to start inference for run {run_id}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to start inference: {str(e)}")
+
+
+@app.get("/progress/{run_id}")
+async def get_progress(run_id: str) -> dict[str, Any]:
+    """
+    Lightweight endpoint for real-time inference progress.
+    Returns: {stage, images_done, images_total, percent_complete}
+    """
+    global _RUN_PROGRESS
+    
+    if run_id not in _RUN_PROGRESS:
+        # If not tracking yet, return 0% with unknown totals
+        logger.debug(f"📡 Progress endpoint called for {run_id} (not tracking yet)")
+        return {
+            "stage": "pending",
+            "images_done": 0,
+            "images_total": 0,
+            "percent_complete": 0,
+        }
+    
+    progress = _RUN_PROGRESS[run_id]
+    images_done = progress.get("images_done", 0)
+    images_total = progress.get("images_total", 1)  # Avoid division by zero
+    percent = round((images_done / max(images_total, 1)) * 100) if images_total > 0 else 0
+    
+    logger.debug(f"📡 Progress endpoint: {run_id} -> {images_done}/{images_total} ({percent}%)")
+    
+    return {
+        "stage": progress.get("stage", "unknown"),
+        "images_done": images_done,
+        "images_total": images_total,
+        "percent_complete": percent,
+    }
 
 
 @app.get("/runs/{run_id}/results")
