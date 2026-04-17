@@ -157,7 +157,7 @@ async def _async_infer_and_poll(
         champion_count = infer_resp.get("champion_count", 0)
         
         # Poll for results (cloud may still be processing)
-        _update_state(stage="tsne", stage_index=5)
+        _update_state(stage="selecting", stage_index=5)
         results = await cloud_client.wait_for_results(run_id, max_wait_seconds=3600, poll_interval=2)
         
         if not results:
@@ -165,33 +165,14 @@ async def _async_infer_and_poll(
         
         logger.info(f"Received results: {champion_count} champions from {file_count} images")
         
-        # Compute TSNE coordinates on demand (not included in initial results)
-        _update_state(stage="computing_tsne", stage_index=6)
-        logger.info("Computing TSNE projection from embeddings...")
-        try:
-            tsne_resp = await cloud_client.compute_tsne(run_id, perplexity=None)
-            tsne_coordinates = tsne_resp.get("tsne_coordinates", [])
-            logger.info(f"TSNE computed: {len(tsne_coordinates)} coordinates")
-        except Exception as e:
-            logger.warning(f"Failed to compute TSNE (will use placeholder): {e}")
-            tsne_coordinates = []
-        
-        # Process results for dashboard
+        # Process results for dashboard (do NOT compute TSNE upfront, store embeddings instead)
         results_list = results.get("results", [])
         
         # Reconstruct dataframe from results
         df_data = []
         embeddings_list = []
         
-        for i, img_result in enumerate(results_list):
-            # Get TSNE coordinates if available, otherwise use placeholder
-            if i < len(tsne_coordinates):
-                tsne_x = float(tsne_coordinates[i]["x"])
-                tsne_y = float(tsne_coordinates[i]["y"])
-            else:
-                tsne_x = 0.0
-                tsne_y = 0.0
-            
+        for img_result in results_list:
             df_data.append({
                 "idx": img_result["index"],
                 "filename": img_result["filename"],
@@ -203,8 +184,6 @@ async def _async_infer_and_poll(
                 "obj_norm": img_result["normalized_scores"]["obj_norm"],
                 "aggregated_score": img_result["aggregated_score"],
                 "cluster_id": img_result["cluster_id"],
-                "tsne_x": tsne_x,
-                "tsne_y": tsne_y,
                 "is_final_selection": img_result["is_champion"],
                 "tech_penalized": img_result["tech_penalized"],
                 "rejection_reason": img_result["rejection_reason"],
@@ -278,8 +257,6 @@ def _df_to_image_list(df: pd.DataFrame) -> list[dict]:
                 "aggregated_score": float(row.get("aggregated_score", 0)),
                 "tech_penalized": bool(row.get("tech_penalized", False)),
                 "cluster_id": int(row.get("cluster_id", -1)),
-                "tsne_x": float(row.get("tsne_x", 0)),
-                "tsne_y": float(row.get("tsne_y", 0)),
                 "is_champion": bool(row.get("is_final_selection", 0) == 1),
                 "rejection_reason": row.get("rejection_reason"),
             }
@@ -387,14 +364,21 @@ async def get_results_endpoint() -> dict:
         if _state.scores_df is None or _state.embeddings is None:
             raise HTTPException(status_code=404, detail="No results available")
         
-        images = _df_to_image_list(_state.scores_df)
+        df = _state.scores_df
+        images = _df_to_image_list(df)
         champions = [img for img in images if img["is_champion"]]
+        
+        # Count clusters and noise
+        cluster_count = int(df[df["cluster_id"] >= 0]["cluster_id"].nunique())
+        noise_count = int((df["cluster_id"] == -1).sum())
         
         return {
             "total_images": len(images),
             "total_champions": len(champions),
             "images": images,
             "champions": champions,
+            "cluster_count": cluster_count,
+            "noise_count": noise_count,
             "parameters": {
                 "epsilon": _state.epsilon,
                 "min_cluster_size": _state.min_cluster_size,
@@ -429,14 +413,29 @@ async def recluster(request: ReclusterRequest) -> dict:
             ignore_object=request.ignore_object,
         )
         
-        images = _df_to_image_list(df)
-        champions = [img for img in images if img["is_champion"]]
+        # Build update list for each image
+        updates = []
+        for _, row in df.iterrows():
+            updates.append({
+                "idx": int(row["idx"]),
+                "aggregated_score": float(row.get("aggregated_score", 0)),
+                "cluster_id": int(row.get("cluster_id", -1)),
+                "is_champion": bool(row.get("is_final_selection", 0) == 1),
+                "rejection_reason": row.get("rejection_reason"),
+            })
+        
+        # Get champions
+        champions = [img for img in updates if img["is_champion"]]
+        
+        # Count clusters and noise
+        cluster_count = int(df[df["cluster_id"] >= 0]["cluster_id"].nunique())
+        noise_count = int((df["cluster_id"] == -1).sum())
         
         return {
-            "total_images": len(images),
-            "total_champions": len(champions),
-            "images": images,
+            "updates": updates,
             "champions": champions,
+            "cluster_count": cluster_count,
+            "noise_count": noise_count,
             "parameters": {
                 "epsilon": request.epsilon,
                 "min_cluster_size": request.min_cluster_size,
@@ -444,6 +443,7 @@ async def recluster(request: ReclusterRequest) -> dict:
             },
         }
     except Exception as e:
+        logger.error(f"Recluster failed: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Reclustering failed: {str(e)}")
 
 
@@ -571,8 +571,6 @@ async def load_run(run_id: str) -> dict:
                 "obj_norm": img_result["normalized_scores"]["obj_norm"],
                 "aggregated_score": img_result["aggregated_score"],
                 "cluster_id": img_result["cluster_id"],
-                "tsne_x": float(img_result.get("tsne_x", 0)),
-                "tsne_y": float(img_result.get("tsne_y", 0)),
                 "is_final_selection": img_result["is_champion"],
                 "tech_penalized": img_result["tech_penalized"],
                 "rejection_reason": img_result["rejection_reason"],
@@ -624,3 +622,43 @@ async def load_run(run_id: str) -> dict:
     except Exception as e:
         logger.error(f"Error loading run {run_id}: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to load run: {str(e)}")
+
+
+@app.post("/compute-tsne")
+async def compute_tsne_endpoint() -> dict:
+    """Compute t-SNE coordinates for current embeddings and clustering."""
+    with _state_lock:
+        if _state.embeddings is None or _state.scores_df is None:
+            raise HTTPException(status_code=404, detail="No embeddings available")
+        
+        embeddings = _state.embeddings
+        df = _state.scores_df
+    
+    try:
+        # Compute t-SNE from embeddings
+        from sklearn.manifold import TSNE
+        logger.info(f"Computing t-SNE for {len(embeddings)} embeddings...")
+        
+        tsne = TSNE(n_components=2, random_state=42, perplexity=min(30, len(embeddings) - 1))
+        coords = tsne.fit_transform(embeddings)
+        
+        # Build result with image indices, cluster IDs, and t-SNE coordinates
+        result_coords = []
+        for i, row in df.iterrows():
+            result_coords.append({
+                "index": int(row.get("idx", i)),
+                "filename": str(row.get("filename", "")),
+                "x": float(coords[i][0]),
+                "y": float(coords[i][1]),
+                "cluster_id": int(row.get("cluster_id", -1)),
+                "is_champion": bool(row.get("is_final_selection", 0) == 1),
+                "aggregated_score": float(row.get("aggregated_score", 0)),
+            })
+        
+        logger.info(f"t-SNE computed successfully: {len(result_coords)} points")
+        return {
+            "tsne_coordinates": result_coords,
+        }
+    except Exception as e:
+        logger.error(f"Failed to compute t-SNE: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to compute t-SNE: {str(e)}")

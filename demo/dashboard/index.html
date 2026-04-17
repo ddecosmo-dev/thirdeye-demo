@@ -452,8 +452,8 @@ async function onRunSelected(select) {
     document.getElementById('file-label').textContent = `Loaded: ${runId}`;
     document.getElementById('file-label').style.color = 'var(--text)';
     
-    // Display the results
-    await pollResults(runId);
+    // Load and display the results (including TSNE computation)
+    await loadResults();
     
   } catch (error) {
     console.error('Failed to load run:', error);
@@ -524,6 +524,8 @@ async function pollStatus() {
     if (data.status === 'done') {
       clearInterval(_pollTimer);
       await loadResults();
+      // Refresh the available runs dropdown to show the newly completed run
+      await loadAvailableRuns();
       document.getElementById('run-btn').disabled = false;
       document.getElementById('pick-btn').disabled = false;
     } else if (data.status === 'error') {
@@ -543,22 +545,51 @@ async function loadResults() {
   if (!res.ok) return;
   const data = await res.json();
   storeResults(data);
+  
+  // Compute t-SNE coordinates
+  await computeAndApplyTSNE();
+  
   renderAll();
-  showResults(data.epsilon);
+  showResults(data.parameters?.epsilon || 0.12);
+}
+
+async function computeAndApplyTSNE() {
+  try {
+    const res = await fetch('/compute-tsne', { method: 'POST' });
+    if (!res.ok) {
+      console.warn('Failed to compute TSNE:', await res.text());
+      return;
+    }
+    const data = await res.json();
+    const tsneCoords = data.tsne_coordinates || [];
+    
+    // Update _allImages with TSNE coordinates
+    for (const coord of tsneCoords) {
+      const img = _allImages.find(i => i.idx === coord.index);
+      if (img) {
+        img.tsne_x = coord.x;
+        img.tsne_y = coord.y;
+      }
+    }
+    console.log(`Applied TSNE coordinates to ${tsneCoords.length} images`);
+  } catch (error) {
+    console.error('Error computing TSNE:', error);
+  }
 }
 
 function storeResults(data) {
   _allImages = data.images;
   _champions = data.champions;
   updateClusterStats(data.cluster_count, data.noise_count, _champions.length);
-  document.getElementById('epsilon-slider').value = data.epsilon;
-  document.getElementById('epsilon-display').textContent = parseFloat(data.epsilon).toFixed(2);
-  if (data.min_cluster_size != null) {
-    document.getElementById('mcs-slider').value = data.min_cluster_size;
-    document.getElementById('mcs-display').textContent = data.min_cluster_size;
+  const params = data.parameters || {};
+  document.getElementById('epsilon-slider').value = params.epsilon || 0.12;
+  document.getElementById('epsilon-display').textContent = parseFloat(params.epsilon || 0.12).toFixed(2);
+  if (params.min_cluster_size != null) {
+    document.getElementById('mcs-slider').value = params.min_cluster_size;
+    document.getElementById('mcs-display').textContent = params.min_cluster_size;
   }
-  if (data.ignore_object != null) {
-    document.getElementById('ignore-obj-toggle').checked = data.ignore_object;
+  if (params.ignore_object != null) {
+    document.getElementById('ignore-obj-toggle').checked = params.ignore_object;
   }
 }
 
@@ -890,12 +921,22 @@ async function recluster(epsilon, minClusterSize, ignoreObject) {
       document.getElementById('recluster-banner').classList.add('visible');
       return;
     }
-    if (!res.ok) return;
+    if (!res.ok) {
+      console.error('Recluster failed:', res.status, await res.text());
+      return;
+    }
     const data = await res.json();
+    console.log('Recluster response:', data);
 
     // Apply updates to _allImages
+    if (!data.updates) {
+      console.error('Recluster response missing updates field:', data);
+      return;
+    }
+    
     const updateMap = {};
     data.updates.forEach(u => { updateMap[u.idx] = u; });
+    let updateCount = 0;
     _allImages.forEach(img => {
       const u = updateMap[img.idx];
       if (u) {
@@ -903,11 +944,19 @@ async function recluster(epsilon, minClusterSize, ignoreObject) {
         img.cluster_id = u.cluster_id;
         img.is_champion = u.is_champion;
         img.rejection_reason = u.rejection_reason;
+        updateCount++;
       }
     });
+    console.log(`Updated ${updateCount} images out of ${_allImages.length}`);
+    
     _champions = data.champions;
+    console.log(`Champions updated: ${_champions.length}`);
 
     updateClusterStats(data.cluster_count, data.noise_count, _champions.length);
+    console.log(`Cluster stats: ${data.cluster_count} clusters, ${data.noise_count} noise`);
+    
+    // Recompute t-SNE with new clustering
+    await computeAndApplyTSNE();
 
     // Re-render affected views
     renderChampions();
