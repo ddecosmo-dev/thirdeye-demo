@@ -1,0 +1,24 @@
+# Server
+fastapi==0.111.0
+uvicorn[standard]==0.30.1
+pydantic==2.7.4
+python-multipart==0.0.9
+httpx==0.27.0
+
+# ML
+torch==2.6.0
+torchvision==0.21.0
+transformers>=4.40.0
+huggingface_hub>=0.22.0
+pyiqa>=0.1.10
+scikit-learn>=1.4.0
+hdbscan>=0.8.33
+
+# Image processing
+Pillow>=10.0.0
+pillow-heif>=0.18.0
+scikit-image>=0.22.0
+
+# Data
+numpy>=1.26.0
+pandas>=2.2.0

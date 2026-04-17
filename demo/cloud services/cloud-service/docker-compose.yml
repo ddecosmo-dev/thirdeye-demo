@@ -1,0 +1,91 @@
+version: '3.8'
+
+services:
+  cloud-service-cpu:
+    # CPU version - use when GPU is not available
+    # Start with: docker-compose up cloud-service-cpu
+    build:
+      context: .
+      dockerfile: Dockerfile.multi
+      target: cpu
+    container_name: thirdeye-cloud-cpu
+    ports:
+      - "8001:8001"
+    volumes:
+      - thirdeye-data:/data
+    environment:
+      - DATA_DIR=/data
+      - MAX_UPLOAD_BYTES=52428800
+      - MAX_UNCOMPRESSED_BYTES=104857600
+      - MAX_FILES_PER_ZIP=500
+    restart: unless-stopped
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8001/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  cloud-service-gpu:
+    # GPU version - use when NVIDIA GPU is available
+    # Start with: docker-compose up cloud-service-gpu
+    # Requires: nvidia-docker or Docker with GPU support enabled
+    # Check GPU: docker run --rm --gpus all nvidia/cuda:11.8.0-runtime nvidia-smi
+    build:
+      context: .
+      dockerfile: Dockerfile.multi
+      target: gpu
+    container_name: thirdeye-cloud-gpu
+    ports:
+      - "8001:8001"
+    volumes:
+      - thirdeye-data:/data
+    environment:
+      - DATA_DIR=/data
+      - MAX_UPLOAD_BYTES=52428800
+      - MAX_UNCOMPRESSED_BYTES=104857600
+      - MAX_FILES_PER_ZIP=500
+      - CUDA_VISIBLE_DEVICES=0
+    restart: unless-stopped
+    deploy:
+      # GPU support - requires Docker 19.03+ or nvidia-docker
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8001/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s  # Longer startup for GPU
+
+  # Optional: Dashboard service (if running together)
+  dashboard:
+    build:
+      context: ../../../dashboard
+      dockerfile: Dockerfile  # You'll need to create this too
+    container_name: thirdeye-dashboard
+    ports:
+      - "8000:8000"
+    environment:
+      - CLOUD_SERVICE_URL=http://cloud-service-cpu:8001
+      # - CLOUD_SERVICE_URL=http://cloud-service-gpu:8001  # Use GPU version
+    depends_on:
+      - cloud-service-cpu
+      # - cloud-service-gpu  # Uncomment if using GPU
+    restart: unless-stopped
+    profiles:
+      - with-dashboard
+
+volumes:
+  thirdeye-data:
+    driver: local
+    driver_opts:
+      type: tmpfs
+      device: tmpfs
+      # To persist data to disk instead:
+      # - Replace volume with: thirdeye-data: with bind mount in services
+      # - Or change to local driver with specified path

@@ -72,3 +72,4 @@ curl -X POST http://localhost:8080/ingest \
 ## Next steps
 - Implement cloud inference pipeline and image scoring updates
 - Add a minimal GUI or API consumer for demo display
+- Add tunnel service for actual endpoints lol
