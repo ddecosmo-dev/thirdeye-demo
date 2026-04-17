@@ -62,5 +62,5 @@ class TSNEResponse(BaseModel):
     status: str
     image_count: int
     perplexity: int
-    tsne_coordinates: list[dict[str, float]]  # [{x, y, index, filename}, ...]
+    tsne_coordinates: list[dict[str, Any]]  # [{x, y, index, filename}, ...]
 

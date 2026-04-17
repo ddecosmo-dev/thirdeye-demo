@@ -7,12 +7,14 @@ The dashboard handles zip uploads, status polling, and result display.
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import os
 import tempfile
 import threading
 import traceback
 import uuid
+import zipfile
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -58,6 +60,18 @@ _STAGE_LABELS = {
 }
 
 _TOTAL_STAGES = 6
+
+
+# ─── Helper: Extract top-level folder name from zip ──────────────────────────
+def _get_zip_folder_name(zip_path: str) -> str:
+    """Extract the top-level folder name from a zip file."""
+    with zipfile.ZipFile(zip_path, 'r') as zf:
+        names = zf.namelist()
+        if not names:
+            return "dataset"
+        # Get the first path component (top-level folder)
+        first = names[0].split('/')[0]
+        return first if first else names[0].split('/')[1] if len(names[0].split('/')) > 1 else "dataset"
 
 
 # ─── Pipeline State ───────────────────────────────────────────────────────────
@@ -172,8 +186,8 @@ async def _async_infer_and_poll(
         for i, img_result in enumerate(results_list):
             # Get TSNE coordinates if available, otherwise use placeholder
             if i < len(tsne_coordinates):
-                tsne_x = float(tsne_coordinates[i][0])
-                tsne_y = float(tsne_coordinates[i][1])
+                tsne_x = float(tsne_coordinates[i]["x"])
+                tsne_y = float(tsne_coordinates[i]["y"])
             else:
                 tsne_x = 0.0
                 tsne_y = 0.0
@@ -313,9 +327,8 @@ async def run_pipeline(
     if not (2 <= min_cluster_size <= 50):
         raise HTTPException(status_code=400, detail="min_cluster_size must be between 2 and 50")
 
-    # Generate run ID and save upload to temp file
-    run_id = f"dashboard_{uuid.uuid4().hex[:12]}"
-    tmp_upload = Path(tempfile.gettempdir()) / f"thirdeye_{run_id}.zip"
+    # Save upload to temp file first
+    tmp_upload = Path(tempfile.gettempdir()) / f"thirdeye_{uuid.uuid4().hex[:8]}.zip"
     
     try:
         with open(tmp_upload, "wb") as f:
@@ -325,7 +338,16 @@ async def run_pipeline(
                 raise ValueError("Empty file uploaded")
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Failed to save upload: {str(e)}")
-
+    
+    # Extract run ID from zip folder name
+    try:
+        run_id = _get_zip_folder_name(str(tmp_upload))
+        # Sanitize the run_id (replace spaces and special chars)
+        run_id = "".join(c if c.isalnum() or c in "_-" else "_" for c in run_id)
+    except Exception as e:
+        logger.warning(f"Could not extract folder name from zip: {e}, using random ID")
+        run_id = f"dataset_{uuid.uuid4().hex[:8]}"
+    
     _update_state(
         status="running",
         stage="extracting",
@@ -472,12 +494,133 @@ async def get_image_file(filename: str):
         if not _state.run_id:
             raise HTTPException(status_code=404, detail="No active run")
         
-        # Construct path to image on cloud service
-        data_dir = os.getenv("DATA_DIR", "../../data")
-        img_path = Path(data_dir) / "runs" / _state.run_id / "images" / filename
+        # Construct absolute path to image file
+        # Dashboard is at /demo/dashboard, data is at /demo/data
+        img_path = Path(__file__).parent.parent / "data" / "runs" / _state.run_id / "images" / filename
         
         if not img_path.exists():
             logger.warning(f"Image not found: {img_path}")
             raise HTTPException(status_code=404, detail=f"Image {filename} not found")
         
         return FileResponse(img_path, media_type="image/jpeg")
+
+
+@app.get("/runs")
+async def list_available_runs() -> dict:
+    """List all available scored datasets."""
+    runs_dir = Path(__file__).parent.parent / "data" / "runs"
+    
+    if not runs_dir.exists():
+        return {"runs": []}
+    
+    available_runs = []
+    for run_dir in sorted(runs_dir.iterdir()):
+        if run_dir.is_dir():
+            # Check if this run has results
+            images_dir = run_dir / "images"
+            results_file = run_dir / "results.json"
+            
+            if images_dir.exists() and results_file.exists():
+                try:
+                    with open(results_file) as f:
+                        results_data = json.load(f)
+                    image_count = len(list(images_dir.glob("*.jpg")))
+                    available_runs.append({
+                        "run_id": run_dir.name,
+                        "image_count": image_count,
+                        "champion_count": results_data.get("champion_count", 0),
+                    })
+                except Exception as e:
+                    logger.warning(f"Error reading run {run_dir.name}: {e}")
+    
+    return {"runs": available_runs}
+
+
+@app.post("/load-run/{run_id}")
+async def load_run(run_id: str) -> dict:
+    """Load a previously scored run without re-running inference."""
+    runs_dir = Path(__file__).parent.parent / "data" / "runs"
+    run_dir = runs_dir / run_id
+    
+    if not run_dir.exists():
+        raise HTTPException(status_code=404, detail=f"Run {run_id} not found")
+    
+    try:
+        results_file = run_dir / "results.json"
+        
+        if not results_file.exists():
+            raise HTTPException(status_code=404, detail=f"No results for run {run_id}")
+        
+        with open(results_file) as f:
+            results = json.load(f)
+        
+        # Reconstruct the dataframe from the results
+        results_list = results.get("results", [])
+        embeddings_list = []
+        df_data = []
+        
+        for img_result in results_list:
+            df_data.append({
+                "idx": img_result["index"],
+                "filename": img_result["filename"],
+                "technical_score": img_result["scores"]["technical"],
+                "aesthetic_score": img_result["scores"]["aesthetic"],
+                "object_aesthetic_score": img_result["scores"]["object"],
+                "tech_norm": img_result["normalized_scores"]["tech_norm"],
+                "aes_norm": img_result["normalized_scores"]["aes_norm"],
+                "obj_norm": img_result["normalized_scores"]["obj_norm"],
+                "aggregated_score": img_result["aggregated_score"],
+                "cluster_id": img_result["cluster_id"],
+                "tsne_x": float(img_result.get("tsne_x", 0)),
+                "tsne_y": float(img_result.get("tsne_y", 0)),
+                "is_final_selection": img_result["is_champion"],
+                "tech_penalized": img_result["tech_penalized"],
+                "rejection_reason": img_result["rejection_reason"],
+            })
+            embeddings_list.append(np.array(img_result["embedding"]))
+        
+        df = pd.DataFrame(df_data)
+        embeddings = np.array(embeddings_list) if embeddings_list else np.array([])
+        
+        # Update state
+        epsilon = results.get("epsilon", 0.12)
+        min_cluster_size = results.get("min_cluster_size", 2)
+        ignore_object = results.get("ignore_object", False)
+        
+        _update_state(
+            status="done",
+            stage="done",
+            stage_index=6,
+            images_done=len(results_list),
+            images_total=len(results_list),
+            run_id=run_id,
+            scores_df=df,
+            embeddings=embeddings,
+            results=results,
+            epsilon=epsilon,
+            min_cluster_size=min_cluster_size,
+            ignore_object=ignore_object,
+            error=None,
+        )
+        
+        # Return image list
+        images = _df_to_image_list(df)
+        champions = [img for img in images if img["is_champion"]]
+        
+        return {
+            "run_id": run_id,
+            "total_images": len(images),
+            "total_champions": len(champions),
+            "images": images,
+            "champions": champions,
+            "parameters": {
+                "epsilon": epsilon,
+                "min_cluster_size": min_cluster_size,
+                "ignore_object": ignore_object,
+            },
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error loading run {run_id}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to load run: {str(e)}")

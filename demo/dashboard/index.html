@@ -251,8 +251,9 @@
       style="background:var(--surface2);border:1px solid var(--border);color:var(--text);"
       onclick="document.getElementById('zip-file').click()">
       Choose .zip…
-    </button>
-    <span id="file-label" style="flex:1;font-size:13px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+    </button>    <select id="runs-dropdown" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:9px 14px;border-radius:8px;font-size:13px;cursor:pointer;outline:none;" onchange="onRunSelected(this)">
+      <option value="">Load previous set…</option>
+    </select>    <span id="file-label" style="flex:1;font-size:13px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
       No file selected
     </span>
     <button class="btn btn-primary" id="run-btn" onclick="startPipeline()" disabled>Run Pipeline</button>
@@ -398,6 +399,69 @@ function onFileSelected(input) {
     document.getElementById('file-label').textContent = file.name;
     document.getElementById('file-label').style.color = 'var(--text)';
     document.getElementById('run-btn').disabled = false;
+  }
+}
+
+// ── Load Available Runs ────────────────────────────────────────────────────────
+async function loadAvailableRuns() {
+  try {
+    const resp = await fetch('/runs');
+    const data = await resp.json();
+    const dropdown = document.getElementById('runs-dropdown');
+    
+    // Clear existing options except the first one
+    while (dropdown.options.length > 1) {
+      dropdown.remove(1);
+    }
+    
+    // Add options for each available run
+    if (data.runs && data.runs.length > 0) {
+      for (const run of data.runs) {
+        const option = document.createElement('option');
+        option.value = run.run_id;
+        option.textContent = `${run.run_id} (${run.image_count} images, ${run.champion_count} champions)`;
+        dropdown.appendChild(option);
+      }
+    }
+  } catch (error) {
+    console.error('Failed to load available runs:', error);
+  }
+}
+
+// ── Load Selected Run ──────────────────────────────────────────────────────────
+async function onRunSelected(select) {
+  const runId = select.value;
+  if (!runId) return;
+  
+  try {
+    document.getElementById('run-btn').disabled = true;
+    showProgress(true);
+    hideResults();
+    
+    const resp = await fetch(`/load-run/${runId}`, { method: 'POST' });
+    if (!resp.ok) {
+      const err = await resp.json();
+      alert('Failed to load run: ' + (err.detail || resp.statusText));
+      select.value = '';
+      return;
+    }
+    
+    const data = await resp.json();
+    
+    // Update UI with loaded data
+    document.getElementById('file-label').textContent = `Loaded: ${runId}`;
+    document.getElementById('file-label').style.color = 'var(--text)';
+    
+    // Display the results
+    await pollResults(runId);
+    
+  } catch (error) {
+    console.error('Failed to load run:', error);
+    alert('Error loading run: ' + error.message);
+    select.value = '';
+  } finally {
+    document.getElementById('run-btn').disabled = true;
+    showProgress(false);
   }
 }
 
@@ -913,6 +977,9 @@ function hideResults() {
 }
 
 // ── Init ──────────────────────────────────────────────────────────────────────
+// Load available runs on page load
+loadAvailableRuns();
+
 // Check if a run already completed (e.g., page refresh after done)
 (async () => {
   try {
