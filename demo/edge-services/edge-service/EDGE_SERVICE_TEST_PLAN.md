@@ -1,143 +1,187 @@
-# Edge Service Test Plan
+# Edge Service Test Plan (Improved)
 
-Goal: expose failures early, isolate them quickly, and provide remedies for hardware + data pipeline issues.
+Goal: expose failures early, isolate them quickly, and provide explicit remediation steps with concrete commands to run on the edge device.
 
-## Setup and sanity
-- Validate dependencies on device: `python -c "import depthai"`
-- Confirm env vars:
-	- `export OAK_CONNECTED=true`
-	- `export BLOB_PATH=/path/to/student_mobilenet_v3.blob`
-	- `export PREFILTER_BLOB_PATH=/path/to/prefilter.blob` (optional)
-	- `export CAPTURE_FPS=1`
-- Confirm model file exists: `ls -lh "$BLOB_PATH"`
-- Confirm device is visible: `depthai_demo` or `python -c "import depthai as dai; print(dai.Device.getAllAvailableDevices())"`
-- Start services: `python -m app.main`
+Top-level quick checks
+- Verify OS, Docker (if used), and Python:
 
-## Coordinator API behavior
-- Start cycle with valid payload -> `status=running`, `run_id` returned.
-	- `curl -X POST http://localhost:8081/cycle/start -H 'Content-Type: application/json' -d '{"label":"field","duration_seconds":10}'`
-- Start cycle twice without stopping -> second returns 400.
-- Start cycle twice without stopping -> second returns 400.
-	- repeat the start command immediately
-- Start cycle with `duration_seconds=0` or negative -> 400.
-- Start cycle with `duration_seconds=0` or negative -> 400.
-	- `curl -X POST http://localhost:8081/cycle/start -H 'Content-Type: application/json' -d '{"label":"bad","duration_seconds":0}'`
-- Stop cycle while idle -> returns a clean response without exception.
-- Stop cycle while idle -> returns a clean response without exception.
-	- `curl -X POST http://localhost:8081/cycle/stop`
-- Abort cycle while idle -> clean response, no crash.
-- Abort cycle while idle -> clean response, no crash.
-	- `curl -X POST http://localhost:8081/cycle/abort -H 'Content-Type: application/json' -d '{"reason":"test"}'`
-- Duration elapses -> `events` contains `duration_elapsed` and `cycle_complete`.
-- Duration elapses -> `events` contains `duration_elapsed` and `cycle_complete`.
-	- `curl http://localhost:8081/events`
+```bash
+uname -a
+python3 --version
+docker --version || true
+```
 
-Remedies:
-- If `duration_seconds` rejects, inspect request JSON and log output.
-- If `events` empty, verify coordinator logging and API version.
+1) Setup & sanity
+- Validate Python + DepthAI availability:
 
-## Processor API behavior
-- `/run/start` then `/image` -> stored image and metadata line written.
-	- `curl -X POST http://localhost:8082/run/start -H 'Content-Type: application/json' -d '{"run_id":"TEST","label":"manual"}'`
-- `/image` without `metadata_json` -> 400.
-- `/image` without `metadata_json` -> 400.
-	- `curl -X POST http://localhost:8082/image -F run_id=TEST -F image=@/path/to/image.jpg`
-- `/image` with invalid JSON -> 400 and log error.
-- `/image` with invalid JSON -> 400 and log error.
-	- `curl -X POST http://localhost:8082/image -F run_id=TEST -F metadata_json='{bad}' -F image=@/path/to/image.jpg`
-- `/run/stop` -> `bundle.zip` created, temp removed.
-- `/run/stop` -> `bundle.zip` created, temp removed.
-	- `curl -X POST http://localhost:8082/run/stop -H 'Content-Type: application/json' -d '{"run_id":"TEST"}'`
-- `/run/abort` -> archive created, status marked aborted.
-- `/run/abort` -> archive created, status marked aborted.
-	- `curl -X POST http://localhost:8082/run/abort -H 'Content-Type: application/json' -d '{"run_id":"TEST"}'`
+```bash
+python3 -c "import depthai as dai; print('depthai OK', hasattr(dai, 'Device'))"
+```
+- Confirm required env vars (adjust paths as needed):
 
-Remedies:
-- If archive missing, check filesystem permissions and disk free space.
-- If temp not removed, verify processor finalization logs.
+```bash
+export OAK_CONNECTED=true
+export BLOB_PATH=/path/to/student_mobilenet_v3.blob
+export PREFILTER_BLOB_PATH=/path/to/prefilter.blob # optional
+export CAPTURE_FPS=1
+ls -lh "$BLOB_PATH"
+```
 
-## Luxonis camera pipeline
-- Set `OAK_CONNECTED=true` and valid `BLOB_PATH` -> pipeline starts and logs.
-	- `export OAK_CONNECTED=true`
-	- `export BLOB_PATH=/path/to/student_mobilenet_v3.blob`
-- Invalid `BLOB_PATH` -> startup error with descriptive message.
-- Invalid `BLOB_PATH` -> startup error with descriptive message.
-	- `export BLOB_PATH=/path/to/missing.blob`
-- Unplug camera mid-run -> expect ingest failures and logged errors.
-- Switch USB port/cable and retry -> confirm device reconnects.
+- Start the service (local dev runner):
 
-Remedies:
-- If device not detected, run `depthai_demo` to confirm driver/hardware.
-- If model fails to load, verify blob compatibility with device.
+```bash
+cd demo/edge-services/edge-service
+python3 -m app.main
+```
 
-## ML inference validation
-- Verify `model_score` and `model_passed` populate from device outputs.
-	- `tail -n 5 /data/runs/<run_id>/temp/metadata.jsonl`
-- If `PREFILTER_BLOB_PATH` is set, verify prefilter fields exist.
-- If `PREFILTER_BLOB_PATH` is set, verify prefilter fields exist.
-	- `grep -m 1 prefilter_score /data/runs/<run_id>/temp/metadata.jsonl`
-- If prefilter missing, confirm `prefilter_passed=true` and tag uses model score.
+2) Build & run via Docker (if running containerized)
+- Build image:
 
-Remedies:
-- If scores are always 0 or missing, verify output layer names and blob outputs.
-- If prefilter never passes, lower `PREFILTER_THRESHOLD` and re-check.
+```bash
+cd demo/edge-services/edge-service
+docker build -t edge-service:local .
+```
+- Start stack (foreground):
 
-## Image normalization check
-- Enable `NORMALIZE_INPUTS=true` and ensure warnings are absent in logs.
-	- `export NORMALIZE_INPUTS=true`
-- If warnings appear, confirm DepthAI version supports mean/std in ImageManip.
-- If still unsupported, use a blob that bakes ImageNet normalization.
+```bash
+docker-compose up
+```
 
-Remedies:
-- If normalization unsupported, rebuild blob with normalization baked in.
+Or detached:
 
-## Storage and disk pressure
-- Fill disk to below `MIN_FREE_DISK_BYTES` -> cycle start should fail.
-	- `dd if=/dev/zero of=/data/fill.bin bs=1M count=500`
-- Large images near `MAX_IMAGE_BYTES` -> ensure validation rejects oversized frames.
-- Run long duration -> verify `bundle.zip` size and file count.
+```bash
+docker-compose up -d
+```
 
-Remedies:
-- Adjust `MIN_FREE_DISK_BYTES` and `MAX_IMAGE_BYTES` in env.
-- Add cleanup script for older runs if disk pressure is frequent.
+3) API smoke & health checks
+- Confirm container(s) running:
 
-## Performance and throughput
-- Run at `CAPTURE_FPS=1`, `5`, `10` and compare dropped frames.
-	- `export CAPTURE_FPS=5`
-- Validate queue behavior when processor is slower than capture.
-- Measure CPU and memory on Pi Zero 2 W during a 10-minute run.
+```bash
+docker ps --filter name=edge-service --format "{{.Names}}: {{.Status}}"
+```
+- Health endpoint (adjust port/path from config):
 
-Remedies:
-- Reduce `CAPTURE_FPS` or lower camera resolution.
-- If CPU high, consider offloading more operations to the camera.
+```bash
+curl -f http://localhost:8081/health || curl -f http://127.0.0.1:8081/health
+```
 
-## Fault injection
-- Stop processor service during run -> coordinator should log ingest failure.
-	- `pkill -f processor_service.py`
-- Stop coordinator during run -> processor should remain stable and allow manual stop.
-- Drop network between coordinator and processor -> events show HTTP errors.
+4) Coordinator API tests (explicit commands)
+- Start cycle (expect `status=running` + `run_id`):
 
-Remedies:
-- Restart service, then call `/run/stop` with the last `run_id`.
-- Add retry/backoff if errors are frequent.
+```bash
+curl -sS -X POST http://localhost:8081/cycle/start \
+  -H 'Content-Type: application/json' \
+  -d '{"label":"field","duration_seconds":10}' | jq
+```
+- Stop cycle:
 
-## Data integrity
-- Compare `metadata.jsonl` count to images stored.
-	- `wc -l /data/runs/<run_id>/temp/metadata.jsonl`
-	- `ls /data/runs/<run_id>/temp/images | wc -l`
-- Verify `bundle.zip` contains `metadata.jsonl` and all images.
-- Verify `bundle.zip` contains `metadata.jsonl` and all images.
-	- `unzip -l /data/runs/<run_id>/bundle.zip | head -n 20`
-- Open stored images to confirm valid JPEGs from encoder.
+```bash
+curl -sS -X POST http://localhost:8081/cycle/stop
+```
+- Abort cycle (expect graceful response):
 
-Remedies:
-- If mismatch, check for partial writes and file locking.
-- If JPEGs are corrupted, inspect encoder settings and camera output.
+```bash
+curl -sS -X POST http://localhost:8081/cycle/abort -H 'Content-Type: application/json' -d '{"reason":"test"}'
+```
 
-## Regression checks
+Remedies: inspect `docker-compose logs coordinator` or `journalctl` for stack traces.
 
-## Regression checks
-- Device path should not run any ML on CPU.
+5) Processor API tests (explicit commands)
+- Start run and POST an image (use a small sample image):
 
-Remedies:
-- Ensure `OAK_CONNECTED` is accurate in each environment.
+```bash
+curl -sS -X POST http://localhost:8082/run/start -H 'Content-Type: application/json' -d '{"run_id":"TEST","label":"manual"}'
+curl -sS -X POST http://localhost:8082/image -F run_id=TEST -F image=@tests/sample_input.jpg
+curl -sS -X POST http://localhost:8082/run/stop -H 'Content-Type: application/json' -d '{"run_id":"TEST"}'
+```
+
+Expect a `bundle.zip` under the run directory; if missing, check filesystem permissions and disk space (`df -h`).
+
+6) ML inference validation
+- Trigger inference via REST (adjust path/port):
+
+```bash
+curl -sS -X POST -F "file=@tests/sample_input.jpg" http://localhost:8081/infer | jq
+```
+
+- Local run (no Docker):
+
+```bash
+python3 app/inference/local_infer.py --model models/test_model.onnx --input tests/sample_input.npy
+```
+
+Verify response JSON includes `model_score` and `model_passed`.
+
+7) Camera/hardware checks
+- Confirm device on USB and DepthAI sees it:
+
+```bash
+lsusb
+python3 -c "import depthai as dai; print(dai.Device.getAllAvailableDevices())"
+```
+- Quick camera script (if present):
+
+```bash
+python3 app/utils/test_camera.py --duration 5
+```
+
+8) Upload / connector tests
+- Trigger uploader path and watch logs:
+
+```bash
+curl -sS -X POST http://localhost:8081/cycles -H 'Content-Type: application/json' -d '{"test":true}'
+docker-compose logs uploader --tail=200
+```
+
+9) Logs & diagnostics
+- Tail combined logs:
+
+```bash
+docker-compose logs -f
+```
+
+- Grab last 200 lines of app logs for bug reports:
+
+```bash
+docker-compose logs --no-color app | tail -n 200 > ~/edge_app_last.log
+```
+
+10) Disk pressure & data integrity
+- Check disk free space and run file counts:
+
+```bash
+df -h /data || df -h /
+wc -l /data/runs/<run_id>/temp/metadata.jsonl || true
+ls /data/runs/<run_id>/temp/images | wc -l || true
+unzip -l /data/runs/<run_id>/bundle.zip | head -n 20 || true
+```
+
+11) Fault injection quick cases
+- Kill processor to ensure coordinator records failure:
+
+```bash
+pkill -f processor_service.py
+docker-compose logs coordinator --tail=200
+```
+
+12) Cleanup & recovery
+- Stop stack and remove images (if needed):
+
+```bash
+docker-compose down
+docker image rm edge-service:local || true
+```
+
+Automated smoke script suggestion
+- Create `demo/edge-services/edge-service/scripts/smoke_check.sh` to run: env checks, `docker-compose up -d`, health curl, inference curl, and exit non-zero on failures.
+
+Notes
+- Replace ports/endpoints and file paths with values in `app/config.py` or `docker-compose.yml`.
+- If Docker is unavailable on target hardware, run Python-based tests and hardware checks directly.
+
+Next steps I can take (choose any):
+- Add `scripts/smoke_check.sh` to the repo
+- Add `app/inference/local_infer.py` wrapper if missing
+- Create a small `tests/sample_input.jpg` and `tests/sample_input.npy`
+
+End of updated test plan.

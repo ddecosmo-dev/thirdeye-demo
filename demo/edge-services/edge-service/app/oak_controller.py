@@ -34,6 +34,17 @@ class FrameSource:
 
 
 class MockFrameSource(FrameSource):
+    # Minimal mock frame source used when no hardware is available
+    def start(self) -> None:
+        return None
+
+    def next_frame(self) -> Frame | None:
+        return None
+
+    def stop(self) -> None:
+        return None
+
+
 class OakFrameSource(FrameSource):
     def __init__(self) -> None:
         self._logger = configure_logging("oak-frame-source")
