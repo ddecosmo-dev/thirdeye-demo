@@ -1,10 +1,10 @@
-"""Shared helpers for ids, timestamps, and disk checks."""
+"""Shared helpers for ids, timestamps, and logging."""
 
 from __future__ import annotations
 
+import logging
 import os
 import re
-import shutil
 import time
 from datetime import datetime
 
@@ -29,7 +29,6 @@ def safe_label(label: str | None) -> str:
 
 
 def create_run_id(label: str | None) -> str:
-    # TODO: Add collision handling if two runs start in same second.
     return f"{utc_timestamp()}_{safe_label(label)}"
 
 
@@ -37,6 +36,13 @@ def ensure_dir(path: str) -> None:
     os.makedirs(path, exist_ok=True)
 
 
-def available_disk_bytes(path: str) -> int:
-    usage = shutil.disk_usage(path)
-    return usage.free
+def configure_logging(name: str) -> logging.Logger:
+    logger = logging.getLogger(name)
+    if logger.handlers:
+        return logger
+    handler = logging.StreamHandler()
+    formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s")
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
+    logger.setLevel(logging.INFO)
+    return logger

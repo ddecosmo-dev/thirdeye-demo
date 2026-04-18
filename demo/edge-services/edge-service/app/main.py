@@ -1,71 +1,37 @@
-"""Edge API entrypoint for cycle control and status."""
+"""Edge service entrypoint for coordinator + processor."""
 
 from __future__ import annotations
 
-from flask import Flask, jsonify, request
+import threading
 
-from .cycle_manager import CycleManager
-
-
-app = Flask(__name__)
-manager = CycleManager()
-
-
-@app.get("/health")
-def health() -> dict[str, str]:
-    return {"status": "ok"}
+from .config import settings
+from .coordinator_service import app as coordinator_app
+from .processor_service import app as processor_app
+from .utils import configure_logging
 
 
-# TODO: Add authentication (shared secret/JWT) before exposing publicly.
-@app.post("/cycle/start")
-def start_cycle():
-    payload = request.get_json(silent=True) or {}
-    label = payload.get("label")
-    duration_seconds = payload.get("duration_seconds")
-    config = payload.get("config")
-
-    try:
-        result = manager.start_cycle(label, duration_seconds, config)
-        return jsonify(result), 200
-    except ValueError as exc:
-        return jsonify({"error": str(exc)}), 400
+def _run_processor() -> None:
+    processor_app.run(
+        host=settings.processor_host,
+        port=settings.processor_port,
+        threaded=True,
+        use_reloader=False,
+    )
 
 
-@app.post("/cycle/stop")
-def stop_cycle():
-    payload = request.get_json(silent=True) or {}
-    run_id = payload.get("run_id")
-
-    if not run_id:
-        return jsonify({"error": "run_id is required"}), 400
-
-    try:
-        result = manager.stop_cycle(run_id)
-        return jsonify(result), 200
-    except ValueError as exc:
-        return jsonify({"error": str(exc)}), 400
-
-
-@app.post("/cycle/abort")
-def abort_cycle():
-    payload = request.get_json(silent=True) or {}
-    run_id = payload.get("run_id")
-    reason = payload.get("reason")
-
-    if not run_id:
-        return jsonify({"error": "run_id is required"}), 400
-
-    try:
-        result = manager.abort_cycle(run_id, reason)
-        return jsonify(result), 200
-    except ValueError as exc:
-        return jsonify({"error": str(exc)}), 400
-
-
-@app.get("/status")
-def status():
-    return jsonify(manager.status()), 200
+def _run_coordinator() -> None:
+    coordinator_app.run(
+        host=settings.coordinator_host,
+        port=settings.coordinator_port,
+        threaded=True,
+        use_reloader=False,
+    )
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=8081)
+    logger = configure_logging("edge-main")
+    logger.info("starting processor service")
+    processor_thread = threading.Thread(target=_run_processor, daemon=True)
+    processor_thread.start()
+    logger.info("starting coordinator service")
+    _run_coordinator()
