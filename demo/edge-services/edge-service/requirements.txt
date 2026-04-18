@@ -1,4 +1,11 @@
+# Core dependencies - pinned for Raspberry Pi Zero 2 W 64-bit compatibility
 flask==3.0.3
 httpx==0.27.0
 Pillow==10.3.0
-depthai
+numpy>=1.24.0,<1.26.0
+requests>=2.31.0
+depthai  # DepthAI (V2.20+ or V3) - use installed version
+
+# Optional: for testing and development
+# pytest>=7.0.0
+# python-dotenv>=1.0.0
