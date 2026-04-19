@@ -288,4 +288,4 @@ def stop_pipeline() -> Any:
 if __name__ == "__main__":
     monitor = threading.Thread(target=_monitor_process, daemon=True, name="pipeline-health-monitor")
     monitor.start()
-    app.run(host="127.0.0.1", port=5000)
+    app.run(host="0.0.0.0", port=5000)

@@ -333,6 +333,11 @@ Start the service on the Pi:
 From a Windows machine on the same network, point at:
     http://192.168.1.160:5000
 
+If you run the service on the Pi, make sure it is started with LAN binding:
+    python support_service.py
+
+The service must listen on `0.0.0.0` on the Pi for remote Windows clients to connect successfully.
+
 Example Windows PowerShell calls for Pi testing:
     Invoke-RestMethod -Uri http://192.168.1.160:5000/start -Method Post -ContentType 'application/json' -Body '{"run_seconds":30,"blur_thresh":100.0,"min_intensity":20.0,"max_intensity":235.0}'
     Invoke-RestMethod -Uri http://192.168.1.160:5000/health
