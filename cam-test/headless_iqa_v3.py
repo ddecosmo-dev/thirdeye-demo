@@ -5,8 +5,13 @@ Pipeline: Camera -> 320x240 resize -> NeuralNetwork (DINOv2-distilled MobileNetV
           -> host (prints scenic score per frame)
 """
 import argparse
+import datetime
+import json
+import tempfile
 import time
+import uuid
 from pathlib import Path
+from typing import Any
 
 import cv2
 import depthai as dai
@@ -47,12 +52,30 @@ def run_prefilter(
 
     return True, "Passed", mean_intensity, laplacian_var
 
+
+def save_log(entries: list[dict[str, Any]], path: Path) -> None:
+    payload = {
+        "run_id": path.stem,
+        "created_at": datetime.datetime.now().isoformat(),
+        "entries": entries,
+    }
+    path.write_text(json.dumps(payload, indent=2))
+
+
 parser = argparse.ArgumentParser(description="Run headless IQA with a raw-image prefilter.")
 parser.add_argument("--run-seconds", type=int, default=RUN_SECONDS, help="How many seconds to run the pipeline.")
 parser.add_argument("--blur-thresh", type=float, default=PREFILTER_BLUR_THRESHOLD, help="Minimum Laplacian variance for non-blurry frames.")
 parser.add_argument("--min-intensity", type=float, default=PREFILTER_MIN_INTENSITY, help="Minimum mean intensity to avoid too-dark frames.")
 parser.add_argument("--max-intensity", type=float, default=PREFILTER_MAX_INTENSITY, help="Maximum mean intensity to avoid overexposure.")
+parser.add_argument("--log-dir", type=Path, default=None, help="Directory to store the JSON log file.")
 args = parser.parse_args()
+
+log_root = args.log_dir or Path(tempfile.gettempdir()) / "thirdeye_iqa_logs"
+log_root.mkdir(parents=True, exist_ok=True)
+run_id = f"run_{datetime.datetime.now():%Y%m%d_%H%M%S}_{uuid.uuid4().hex[:6]}"
+log_file = log_root / f"{run_id}.json"
+log_entries: list[dict[str, Any]] = []
+print(f"Logging JSON to {log_file}")
 
 pipeline = dai.Pipeline()
 
@@ -110,6 +133,18 @@ try:
 
         frame_count += 1
         score_sum += score
+        entry = {
+            "frame_index": frame_count,
+            "timestamp": datetime.datetime.now().isoformat(),
+            "prefilter_passed": prefilter_passed,
+            "prefilter_reason": prefilter_reason,
+            "mean_intensity": round(mean_intensity, 2),
+            "blur_variance": round(blur_var, 2),
+            "scenic_score": round(score, 4),
+        }
+        log_entries.append(entry)
+        save_log(log_entries, log_file)
+
         print(
             f"Frame {frame_count:4d}  prefilter={prefilter_reason} "
             f"(mean={mean_intensity:.1f}, blur={blur_var:.1f})  scenic_score={score:.4f}"
