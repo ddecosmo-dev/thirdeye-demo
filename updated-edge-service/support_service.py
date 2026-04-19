@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import datetime
+import shutil
 import subprocess
 import sys
 import threading
@@ -18,8 +19,10 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 PIPELINE_SCRIPT = SCRIPT_DIR / "headless_iqa_v3.py"
 RUNTIME_DATA_ROOT = SCRIPT_DIR / "runtime_data"
 OUTBOUND_ROOT = SCRIPT_DIR / "outbound"
+INSPECTION_ROOT = SCRIPT_DIR / "inspection"
 RUNTIME_DATA_ROOT.mkdir(parents=True, exist_ok=True)
 OUTBOUND_ROOT.mkdir(parents=True, exist_ok=True)
+INSPECTION_ROOT.mkdir(parents=True, exist_ok=True)
 
 _process_lock = threading.Lock()
 _process: subprocess.Popen | None = None
@@ -38,6 +41,7 @@ _health: dict[str, Any] = {
     "process_start_time": None,
     "last_update": None,
     "zip_path": None,
+    "inspection_path": None,
 }
 
 HEALTH_CHECK_INTERVAL = 2.0
@@ -75,6 +79,18 @@ def _zip_run_dir(run_dir: Path) -> Path:
     return target_zip
 
 
+def _cleanup_run_dir(run_dir: Path) -> None:
+    if run_dir.exists():
+        shutil.rmtree(run_dir)
+
+
+def _move_run_dir_to_inspection(run_dir: Path) -> Path:
+    target_dir = INSPECTION_ROOT / run_dir.name
+    if target_dir.exists():
+        shutil.rmtree(target_dir)
+    return Path(shutil.move(str(run_dir), str(target_dir)))
+
+
 def _monitor_process() -> None:
     global _process, _process_args, _current_run_dir, _intentional_stop, _stop_mode
     while True:
@@ -104,11 +120,16 @@ def _monitor_process() -> None:
                         state = "crashed"
 
                     zip_path = None
+                    inspection_path = None
                     if healthy and state in {"completed", "stopped"} and _current_run_dir is not None:
                         try:
                             zip_path = str(_zip_run_dir(_current_run_dir))
+                            _cleanup_run_dir(_current_run_dir)
                         except Exception as exc:
+                            inspection_path = str(_move_run_dir_to_inspection(_current_run_dir))
                             _update_health(last_error=str(exc))
+                    elif _current_run_dir is not None:
+                        inspection_path = str(_move_run_dir_to_inspection(_current_run_dir))
 
                     _update_health(
                         running=False,
@@ -118,6 +139,7 @@ def _monitor_process() -> None:
                         last_exit_code=exit_code,
                         last_error=None if exit_code == 0 else f"Exit code {exit_code}",
                         zip_path=zip_path,
+                        inspection_path=inspection_path,
                     )
                     _process = None
                     _process_args = None
@@ -148,16 +170,8 @@ def health() -> Any:
         "process_start_time": status_snapshot["health"]["process_start_time"],
         "last_update": status_snapshot["health"]["last_update"],
         "zip_path": status_snapshot["health"]["zip_path"],
-    })
-
-
-@app.route("/archive-status", methods=["GET"])
-def archive_status() -> Any:
-    status_snapshot = _get_status_snapshot()
-    zip_path = status_snapshot["health"]["zip_path"]
-    return jsonify({
-        "archive_available": zip_path is not None,
-        "zip_path": zip_path,
+        "inspection_path": status_snapshot["health"]["inspection_path"],
+        "inspection_path": status_snapshot["health"]["inspection_path"],
         "state": status_snapshot["health"]["state"],
         "healthy": status_snapshot["health"]["healthy"],
         "stop_reason": status_snapshot["health"]["stop_reason"],

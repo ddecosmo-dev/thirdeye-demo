@@ -50,3 +50,42 @@ Also, each run should make a test directory in whichever saving location
 
 i.e we call the functions in logs/
 it makes run_XXXXX with the json and image files inside 
+
+COMPLETED GREAT JOB!
+
+
+New task: Support Coordinator Service:
+Now we will make a REST service that tells the pi when to start and stop the pipeline we have just made.
+The pipeline handles inference along with storing the images in a temp folder.
+
+The new coordinator will recieved POST requests from an external endpoint to begin inference.
+
+For now, lets create a service (likely flask?) that recieves a localhost post request, then calls the pipeline with associated flags on the camera.
+
+Once this baseline is completed we can expand the service. 
+
+COMPLETED
+
+
+Task 5: improved health checks.
+
+The service itself should check intermittently if the pipeline is still running. This does not need to be HTTP since it is internal, just whatever works best for the pi. 
+
+Based on this check, service should know if the pipeline is running and if it is "healthy"
+If the pipeline stopped, it should have internal handling or knowledge of whether it was intentional or a bug/error
+
+Completed
+
+
+Task 5: Data handling
+
+Now, when the health service detects a successful completion of the service, lets have the coordinator zip up the current test directory into a compact zip file. The file should be the whole directory, image + json. 
+
+Importantly, this should only occur if he status is completed for the test, if it errors out or is currently running nothgin should be zipped. Zipped files should go in and outbound or other directory to indicate they are meant to be sent to another destination. 
+
+Important, we should also start saving the tests in a temp or temp_test folder. 
+
+Also, we need to update the stop endpoint. It needs 2 different flags.
+
+Stop, tells the current pipeline to stop. ends with a completed tag (zip desired)
+Abort, tell the current pipeline to stop, ends with a error or abort tag (no zip)
