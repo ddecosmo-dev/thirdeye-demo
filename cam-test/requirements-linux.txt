@@ -1,0 +1,15 @@
+# Raspberry Pi OS Lite 64-bit / Debian 13 test environment for headless IQA
+# Uses the Pi-tested DepthAI v3 versions documented in cam-test/README.md.
+
+# DepthAI v3 for Raspberry Pi 64-bit
+depthai==3.0.0
+depthai-nodes==0.3.4
+
+# Basic runtime dependencies
+numpy==2.4.4
+opencv-python-headless==4.10.0
+
+# Optional support packages used by the repo
+python-dotenv
+PyYAML==6.0.2
+requests==2.32.3
