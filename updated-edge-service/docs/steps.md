@@ -89,3 +89,7 @@ Also, we need to update the stop endpoint. It needs 2 different flags.
 
 Stop, tells the current pipeline to stop. ends with a completed tag (zip desired)
 Abort, tell the current pipeline to stop, ends with a error or abort tag (no zip)
+
+
+Task 6: Temp cleaning
+Do we need to delete the temporary files? Or is there a more elegant way to do this?

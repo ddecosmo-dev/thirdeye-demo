@@ -323,6 +323,36 @@ Example curl calls:
     curl -X POST http://127.0.0.1:5000/stop -H "Content-Type: application/json" -d '{"mode":"stop"}'
     curl -X POST http://127.0.0.1:5000/stop -H "Content-Type: application/json" -d '{"mode":"abort"}'
 
+Pi Network Testing
+------------------
+Use the same API contract and endpoints, but replace localhost with the Pi LAN IP.
+
+Start the service on the Pi:
+    python support_service.py
+
+From a Windows machine on the same network, point at:
+    http://192.168.1.160:5000
+
+Example Windows PowerShell calls for Pi testing:
+    Invoke-RestMethod -Uri http://192.168.1.160:5000/start -Method Post -ContentType 'application/json' -Body '{"run_seconds":30,"blur_thresh":100.0,"min_intensity":20.0,"max_intensity":235.0}'
+    Invoke-RestMethod -Uri http://192.168.1.160:5000/health
+    Invoke-RestMethod -Uri http://192.168.1.160:5000/archive-status
+    Invoke-RestMethod -Uri http://192.168.1.160:5000/stop -Method Post -Body '{"mode":"stop"}' -ContentType 'application/json'
+    Invoke-RestMethod -Uri http://192.168.1.160:5000/stop -Method Post -Body '{"mode":"abort"}' -ContentType 'application/json'
+
+Example curl calls for Pi testing:
+    curl -X POST http://192.168.1.160:5000/start -H "Content-Type: application/json" -d '{"run_seconds":30,"blur_thresh":100.0,"min_intensity":20.0,"max_intensity":235.0}'
+    curl http://192.168.1.160:5000/health
+    curl http://192.168.1.160:5000/archive-status
+    curl -X POST http://192.168.1.160:5000/stop -H "Content-Type: application/json" -d '{"mode":"stop"}'
+    curl -X POST http://192.168.1.160:5000/stop -H "Content-Type: application/json" -d '{"mode":"abort"}'
+
+Notes:
+  - This uses the same endpoints and request payloads as local Windows testing.
+  - Only the host changes from `127.0.0.1` to `192.168.1.160`.
+  - Ensure the Pi and Windows machine are on the same LAN.
+  - If the Pi is using DHCP, use `hostname -I` or `ip addr show` on the Pi to verify the current address.
+
 The service launches `headless_iqa_v3.py` as a separate process and stores logs under `logs/` by default.
 
 MODEL CONVERSION PIPELINE (PyTorch -> .blob)
