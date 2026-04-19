@@ -4,6 +4,7 @@ complete
 
 Step 2
 Add prefilter to this model, should also be included in output text
+images should be before the prefilter, but should not be imageNet normalized like inputs to NN node
 
 # This section now runs the fast_quality_prefilter on the dataset
 # Note: Since the dataset is in memory as PIL images, we adapt the filter logic
@@ -24,4 +25,7 @@ def run_prefilter_on_dataset(hf_dataset, index, blur_thresh=100):
 
     return True, "Passed"
 
-    
+COMPLETED! GREAT JOB!
+
+
+Step 3:
