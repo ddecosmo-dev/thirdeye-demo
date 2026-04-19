@@ -20,7 +20,7 @@ import numpy as np
 #fix if needed
 #BLOB_PATH = Path("~/thirdeye_project/student_mobilenet_v3.blob").expanduser()
 BLOB_PATH = Path(__file__).resolve().parent / "student_mobilenet_v3.blob"
-RUN_SECONDS = 30
+RUN_SECONDS = 10
 SET_FPS = 2.0
 
 # Prefilter cutoff defaults, matching the shape of the example in steps.md
@@ -73,9 +73,12 @@ args = parser.parse_args()
 log_root = args.log_dir or Path(tempfile.gettempdir()) / "thirdeye_iqa_logs"
 log_root.mkdir(parents=True, exist_ok=True)
 run_id = f"run_{datetime.datetime.now():%Y%m%d_%H%M%S}_{uuid.uuid4().hex[:6]}"
-log_file = log_root / f"{run_id}.json"
+run_dir = log_root / run_id
+run_dir.mkdir(parents=True, exist_ok=True)
+log_file = run_dir / "results.json"
 log_entries: list[dict[str, Any]] = []
 print(f"Logging JSON to {log_file}")
+print(f"Saving images to {run_dir}")
 
 pipeline = dai.Pipeline()
 
@@ -133,9 +136,15 @@ try:
 
         frame_count += 1
         score_sum += score
+        image_filename = f"frame_{frame_count:04d}.jpg"
+        image_path = run_dir / image_filename
+        saved_frame = cv2.resize(raw_frame, (NN_W * 2, NN_H * 2), interpolation=cv2.INTER_LINEAR)
+        cv2.imwrite(str(image_path), saved_frame)
+
         entry = {
             "frame_index": frame_count,
             "timestamp": datetime.datetime.now().isoformat(),
+            "image_filename": image_filename,
             "prefilter_passed": prefilter_passed,
             "prefilter_reason": prefilter_reason,
             "mean_intensity": round(mean_intensity, 2),
@@ -147,7 +156,8 @@ try:
 
         print(
             f"Frame {frame_count:4d}  prefilter={prefilter_reason} "
-            f"(mean={mean_intensity:.1f}, blur={blur_var:.1f})  scenic_score={score:.4f}"
+            f"(mean={mean_intensity:.1f}, blur={blur_var:.1f})  scenic_score={score:.4f} "
+            f"image={image_filename}"
         )
 
 except KeyboardInterrupt:
