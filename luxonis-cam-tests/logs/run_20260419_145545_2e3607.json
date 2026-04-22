@@ -1,0 +1,555 @@
+{
+  "run_id": "run_20260419_145545_2e3607",
+  "created_at": "2026-04-19T14:56:19.112142",
+  "entries": [
+    {
+      "frame_index": 1,
+      "timestamp": "2026-04-19T14:55:49.118525",
+      "prefilter_passed": false,
+      "prefilter_reason": "Too Blurry",
+      "mean_intensity": 50.09,
+      "blur_variance": 52.8,
+      "scenic_score": 0.172
+    },
+    {
+      "frame_index": 2,
+      "timestamp": "2026-04-19T14:55:49.613893",
+      "prefilter_passed": false,
+      "prefilter_reason": "Too Blurry",
+      "mean_intensity": 50.01,
+      "blur_variance": 52.7,
+      "scenic_score": 0.1641
+    },
+    {
+      "frame_index": 3,
+      "timestamp": "2026-04-19T14:55:50.113765",
+      "prefilter_passed": false,
+      "prefilter_reason": "Too Blurry",
+      "mean_intensity": 50.18,
+      "blur_variance": 65.55,
+      "scenic_score": 0.0523
+    },
+    {
+      "frame_index": 4,
+      "timestamp": "2026-04-19T14:55:50.612780",
+      "prefilter_passed": false,
+      "prefilter_reason": "Too Blurry",
+      "mean_intensity": 50.09,
+      "blur_variance": 65.05,
+      "scenic_score": 0.0558
+    },
+    {
+      "frame_index": 5,
+      "timestamp": "2026-04-19T14:55:51.113796",
+      "prefilter_passed": false,
+      "prefilter_reason": "Too Blurry",
+      "mean_intensity": 49.76,
+      "blur_variance": 64.46,
+      "scenic_score": 0.0517
+    },
+    {
+      "frame_index": 6,
+      "timestamp": "2026-04-19T14:55:51.612622",
+      "prefilter_passed": false,
+      "prefilter_reason": "Too Blurry",
+      "mean_intensity": 49.64,
+      "blur_variance": 64.6,
+      "scenic_score": 0.0489
+    },
+    {
+      "frame_index": 7,
+      "timestamp": "2026-04-19T14:55:52.112825",
+      "prefilter_passed": false,
+      "prefilter_reason": "Too Blurry",
+      "mean_intensity": 49.48,
+      "blur_variance": 64.71,
+      "scenic_score": 0.0516
+    },
+    {
+      "frame_index": 8,
+      "timestamp": "2026-04-19T14:55:52.613654",
+      "prefilter_passed": false,
+      "prefilter_reason": "Too Blurry",
+      "mean_intensity": 49.39,
+      "blur_variance": 64.46,
+      "scenic_score": 0.0546
+    },
+    {
+      "frame_index": 9,
+      "timestamp": "2026-04-19T14:55:53.112471",
+      "prefilter_passed": false,
+      "prefilter_reason": "Too Blurry",
+      "mean_intensity": 49.32,
+      "blur_variance": 64.06,
+      "scenic_score": 0.0527
+    },
+    {
+      "frame_index": 10,
+      "timestamp": "2026-04-19T14:55:53.613499",
+      "prefilter_passed": true,
+      "prefilter_reason": "Passed",
+      "mean_intensity": 230.46,
+      "blur_variance": 1859.6,
+      "scenic_score": 0.0578
+    },
+    {
+      "frame_index": 11,
+      "timestamp": "2026-04-19T14:55:54.113603",
+      "prefilter_passed": true,
+      "prefilter_reason": "Passed",
+      "mean_intensity": 230.77,
+      "blur_variance": 1863.02,
+      "scenic_score": 0.0531
+    },
+    {
+      "frame_index": 12,
+      "timestamp": "2026-04-19T14:55:54.613696",
+      "prefilter_passed": true,
+      "prefilter_reason": "Passed",
+      "mean_intensity": 207.23,
+      "blur_variance": 1451.87,
+      "scenic_score": 0.0323
+    },
+    {
+      "frame_index": 13,
+      "timestamp": "2026-04-19T14:55:55.112956",
+      "prefilter_passed": true,
+      "prefilter_reason": "Passed",
+      "mean_intensity": 231.13,
+      "blur_variance": 1786.94,
+      "scenic_score": 0.0498
+    },
+    {
+      "frame_index": 14,
+      "timestamp": "2026-04-19T14:55:55.613169",
+      "prefilter_passed": true,
+      "prefilter_reason": "Passed",
+      "mean_intensity": 228.95,
+      "blur_variance": 1836.81,
+      "scenic_score": 0.0626
+    },
+    {
+      "frame_index": 15,
+      "timestamp": "2026-04-19T14:55:56.113455",
+      "prefilter_passed": true,
+      "prefilter_reason": "Passed",
+      "mean_intensity": 117.2,
+      "blur_variance": 216.09,
+      "scenic_score": 0.0165
+    },
+    {
+      "frame_index": 16,
+      "timestamp": "2026-04-19T14:55:56.613525",
+      "prefilter_passed": true,
+      "prefilter_reason": "Passed",
+      "mean_intensity": 220.23,
+      "blur_variance": 1669.19,
+      "scenic_score": 0.0433
+    },
+    {
+      "frame_index": 17,
+      "timestamp": "2026-04-19T14:55:57.111832",
+      "prefilter_passed": true,
+      "prefilter_reason": "Passed",
+      "mean_intensity": 216.77,
+      "blur_variance": 1495.5,
+      "scenic_score": 0.0847
+    },
+    {
+      "frame_index": 18,
+      "timestamp": "2026-04-19T14:55:57.613420",
+      "prefilter_passed": true,
+      "prefilter_reason": "Passed",
+      "mean_intensity": 211.69,
+      "blur_variance": 1429.29,
+      "scenic_score": 0.0759
+    },
+    {
+      "frame_index": 19,
+      "timestamp": "2026-04-19T14:55:58.111612",
+      "prefilter_passed": true,
+      "prefilter_reason": "Passed",
+      "mean_intensity": 206.31,
+      "blur_variance": 1364.76,
+      "scenic_score": 0.0618
+    },
+    {
+      "frame_index": 20,
+      "timestamp": "2026-04-19T14:55:58.613455",
+      "prefilter_passed": true,
+      "prefilter_reason": "Passed",
+      "mean_intensity": 200.35,
+      "blur_variance": 1254.4,
+      "scenic_score": 0.0499
+    },
+    {
+      "frame_index": 21,
+      "timestamp": "2026-04-19T14:55:59.112792",
+      "prefilter_passed": true,
+      "prefilter_reason": "Passed",
+      "mean_intensity": 198.31,
+      "blur_variance": 1280.6,
+      "scenic_score": 0.042
+    },
+    {
+      "frame_index": 22,
+      "timestamp": "2026-04-19T14:55:59.613504",
+      "prefilter_passed": true,
+      "prefilter_reason": "Passed",
+      "mean_intensity": 192.9,
+      "blur_variance": 1229.43,
+      "scenic_score": 0.0429
+    },
+    {
+      "frame_index": 23,
+      "timestamp": "2026-04-19T14:56:00.112477",
+      "prefilter_passed": true,
+      "prefilter_reason": "Passed",
+      "mean_intensity": 196.23,
+      "blur_variance": 1253.19,
+      "scenic_score": 0.0553
+    },
+    {
+      "frame_index": 24,
+      "timestamp": "2026-04-19T14:56:00.613643",
+      "prefilter_passed": true,
+      "prefilter_reason": "Passed",
+      "mean_intensity": 191.8,
+      "blur_variance": 1197.65,
+      "scenic_score": 0.0473
+    },
+    {
+      "frame_index": 25,
+      "timestamp": "2026-04-19T14:56:01.112862",
+      "prefilter_passed": true,
+      "prefilter_reason": "Passed",
+      "mean_intensity": 187.74,
+      "blur_variance": 1143.14,
+      "scenic_score": 0.0498
+    },
+    {
+      "frame_index": 26,
+      "timestamp": "2026-04-19T14:56:01.612124",
+      "prefilter_passed": true,
+      "prefilter_reason": "Passed",
+      "mean_intensity": 184.07,
+      "blur_variance": 1100.9,
+      "scenic_score": 0.051
+    },
+    {
+      "frame_index": 27,
+      "timestamp": "2026-04-19T14:56:02.112765",
+      "prefilter_passed": true,
+      "prefilter_reason": "Passed",
+      "mean_intensity": 180.3,
+      "blur_variance": 1056.7,
+      "scenic_score": 0.0506
+    },
+    {
+      "frame_index": 28,
+      "timestamp": "2026-04-19T14:56:02.612841",
+      "prefilter_passed": true,
+      "prefilter_reason": "Passed",
+      "mean_intensity": 176.54,
+      "blur_variance": 1012.81,
+      "scenic_score": 0.0443
+    },
+    {
+      "frame_index": 29,
+      "timestamp": "2026-04-19T14:56:03.112873",
+      "prefilter_passed": true,
+      "prefilter_reason": "Passed",
+      "mean_intensity": 172.52,
+      "blur_variance": 973.7,
+      "scenic_score": 0.0497
+    },
+    {
+      "frame_index": 30,
+      "timestamp": "2026-04-19T14:56:03.612115",
+      "prefilter_passed": true,
+      "prefilter_reason": "Passed",
+      "mean_intensity": 168.67,
+      "blur_variance": 935.08,
+      "scenic_score": 0.0449
+    },
+    {
+      "frame_index": 31,
+      "timestamp": "2026-04-19T14:56:04.113293",
+      "prefilter_passed": true,
+      "prefilter_reason": "Passed",
+      "mean_intensity": 165.44,
+      "blur_variance": 900.64,
+      "scenic_score": 0.0389
+    },
+    {
+      "frame_index": 32,
+      "timestamp": "2026-04-19T14:56:04.612846",
+      "prefilter_passed": true,
+      "prefilter_reason": "Passed",
+      "mean_intensity": 163.34,
+      "blur_variance": 871.25,
+      "scenic_score": 0.0453
+    },
+    {
+      "frame_index": 33,
+      "timestamp": "2026-04-19T14:56:05.112675",
+      "prefilter_passed": true,
+      "prefilter_reason": "Passed",
+      "mean_intensity": 161.35,
+      "blur_variance": 841.71,
+      "scenic_score": 0.0421
+    },
+    {
+      "frame_index": 34,
+      "timestamp": "2026-04-19T14:56:05.612684",
+      "prefilter_passed": true,
+      "prefilter_reason": "Passed",
+      "mean_intensity": 159.25,
+      "blur_variance": 817.14,
+      "scenic_score": 0.0422
+    },
+    {
+      "frame_index": 35,
+      "timestamp": "2026-04-19T14:56:06.112711",
+      "prefilter_passed": true,
+      "prefilter_reason": "Passed",
+      "mean_intensity": 156.83,
+      "blur_variance": 788.21,
+      "scenic_score": 0.0398
+    },
+    {
+      "frame_index": 36,
+      "timestamp": "2026-04-19T14:56:06.612747",
+      "prefilter_passed": true,
+      "prefilter_reason": "Passed",
+      "mean_intensity": 154.67,
+      "blur_variance": 764.32,
+      "scenic_score": 0.0421
+    },
+    {
+      "frame_index": 37,
+      "timestamp": "2026-04-19T14:56:07.112659",
+      "prefilter_passed": true,
+      "prefilter_reason": "Passed",
+      "mean_intensity": 152.47,
+      "blur_variance": 740.56,
+      "scenic_score": 0.0431
+    },
+    {
+      "frame_index": 38,
+      "timestamp": "2026-04-19T14:56:07.612689",
+      "prefilter_passed": true,
+      "prefilter_reason": "Passed",
+      "mean_intensity": 150.72,
+      "blur_variance": 724.05,
+      "scenic_score": 0.0453
+    },
+    {
+      "frame_index": 39,
+      "timestamp": "2026-04-19T14:56:08.112680",
+      "prefilter_passed": true,
+      "prefilter_reason": "Passed",
+      "mean_intensity": 148.62,
+      "blur_variance": 703.65,
+      "scenic_score": 0.0412
+    },
+    {
+      "frame_index": 40,
+      "timestamp": "2026-04-19T14:56:08.612545",
+      "prefilter_passed": true,
+      "prefilter_reason": "Passed",
+      "mean_intensity": 146.99,
+      "blur_variance": 687.36,
+      "scenic_score": 0.0399
+    },
+    {
+      "frame_index": 41,
+      "timestamp": "2026-04-19T14:56:09.111669",
+      "prefilter_passed": true,
+      "prefilter_reason": "Passed",
+      "mean_intensity": 135.52,
+      "blur_variance": 576.09,
+      "scenic_score": 0.042
+    },
+    {
+      "frame_index": 42,
+      "timestamp": "2026-04-19T14:56:09.611574",
+      "prefilter_passed": true,
+      "prefilter_reason": "Passed",
+      "mean_intensity": 135.56,
+      "blur_variance": 576.16,
+      "scenic_score": 0.0439
+    },
+    {
+      "frame_index": 43,
+      "timestamp": "2026-04-19T14:56:10.112559",
+      "prefilter_passed": true,
+      "prefilter_reason": "Passed",
+      "mean_intensity": 136.08,
+      "blur_variance": 577.73,
+      "scenic_score": 0.0401
+    },
+    {
+      "frame_index": 44,
+      "timestamp": "2026-04-19T14:56:10.611241",
+      "prefilter_passed": true,
+      "prefilter_reason": "Passed",
+      "mean_intensity": 136.34,
+      "blur_variance": 577.44,
+      "scenic_score": 0.0437
+    },
+    {
+      "frame_index": 45,
+      "timestamp": "2026-04-19T14:56:11.111657",
+      "prefilter_passed": true,
+      "prefilter_reason": "Passed",
+      "mean_intensity": 136.41,
+      "blur_variance": 578.97,
+      "scenic_score": 0.0453
+    },
+    {
+      "frame_index": 46,
+      "timestamp": "2026-04-19T14:56:11.611520",
+      "prefilter_passed": true,
+      "prefilter_reason": "Passed",
+      "mean_intensity": 136.29,
+      "blur_variance": 581.34,
+      "scenic_score": 0.0461
+    },
+    {
+      "frame_index": 47,
+      "timestamp": "2026-04-19T14:56:12.111400",
+      "prefilter_passed": true,
+      "prefilter_reason": "Passed",
+      "mean_intensity": 136.23,
+      "blur_variance": 580.12,
+      "scenic_score": 0.0411
+    },
+    {
+      "frame_index": 48,
+      "timestamp": "2026-04-19T14:56:12.611922",
+      "prefilter_passed": true,
+      "prefilter_reason": "Passed",
+      "mean_intensity": 136.24,
+      "blur_variance": 579.19,
+      "scenic_score": 0.0507
+    },
+    {
+      "frame_index": 49,
+      "timestamp": "2026-04-19T14:56:13.111229",
+      "prefilter_passed": true,
+      "prefilter_reason": "Passed",
+      "mean_intensity": 136.2,
+      "blur_variance": 578.73,
+      "scenic_score": 0.0488
+    },
+    {
+      "frame_index": 50,
+      "timestamp": "2026-04-19T14:56:13.611574",
+      "prefilter_passed": true,
+      "prefilter_reason": "Passed",
+      "mean_intensity": 136.25,
+      "blur_variance": 578.43,
+      "scenic_score": 0.0421
+    },
+    {
+      "frame_index": 51,
+      "timestamp": "2026-04-19T14:56:14.111901",
+      "prefilter_passed": true,
+      "prefilter_reason": "Passed",
+      "mean_intensity": 136.3,
+      "blur_variance": 577.03,
+      "scenic_score": 0.0387
+    },
+    {
+      "frame_index": 52,
+      "timestamp": "2026-04-19T14:56:14.610509",
+      "prefilter_passed": true,
+      "prefilter_reason": "Passed",
+      "mean_intensity": 136.31,
+      "blur_variance": 577.89,
+      "scenic_score": 0.0392
+    },
+    {
+      "frame_index": 53,
+      "timestamp": "2026-04-19T14:56:15.117814",
+      "prefilter_passed": true,
+      "prefilter_reason": "Passed",
+      "mean_intensity": 136.42,
+      "blur_variance": 577.82,
+      "scenic_score": 0.0403
+    },
+    {
+      "frame_index": 54,
+      "timestamp": "2026-04-19T14:56:15.611987",
+      "prefilter_passed": true,
+      "prefilter_reason": "Passed",
+      "mean_intensity": 136.51,
+      "blur_variance": 577.61,
+      "scenic_score": 0.0489
+    },
+    {
+      "frame_index": 55,
+      "timestamp": "2026-04-19T14:56:16.111760",
+      "prefilter_passed": true,
+      "prefilter_reason": "Passed",
+      "mean_intensity": 138.24,
+      "blur_variance": 571.55,
+      "scenic_score": 0.0457
+    },
+    {
+      "frame_index": 56,
+      "timestamp": "2026-04-19T14:56:16.611738",
+      "prefilter_passed": true,
+      "prefilter_reason": "Passed",
+      "mean_intensity": 138.08,
+      "blur_variance": 564.4,
+      "scenic_score": 0.0563
+    },
+    {
+      "frame_index": 57,
+      "timestamp": "2026-04-19T14:56:17.110269",
+      "prefilter_passed": true,
+      "prefilter_reason": "Passed",
+      "mean_intensity": 137.54,
+      "blur_variance": 559.64,
+      "scenic_score": 0.0723
+    },
+    {
+      "frame_index": 58,
+      "timestamp": "2026-04-19T14:56:17.611470",
+      "prefilter_passed": true,
+      "prefilter_reason": "Passed",
+      "mean_intensity": 136.95,
+      "blur_variance": 547.95,
+      "scenic_score": 0.0701
+    },
+    {
+      "frame_index": 59,
+      "timestamp": "2026-04-19T14:56:18.111632",
+      "prefilter_passed": true,
+      "prefilter_reason": "Passed",
+      "mean_intensity": 136.65,
+      "blur_variance": 550.16,
+      "scenic_score": 0.0276
+    },
+    {
+      "frame_index": 60,
+      "timestamp": "2026-04-19T14:56:18.610899",
+      "prefilter_passed": true,
+      "prefilter_reason": "Passed",
+      "mean_intensity": 137.72,
+      "blur_variance": 549.35,
+      "scenic_score": 0.0495
+    },
+    {
+      "frame_index": 61,
+      "timestamp": "2026-04-19T14:56:19.112085",
+      "prefilter_passed": true,
+      "prefilter_reason": "Passed",
+      "mean_intensity": 137.41,
+      "blur_variance": 547.54,
+      "scenic_score": 0.0313
+    }
+  ]
+}

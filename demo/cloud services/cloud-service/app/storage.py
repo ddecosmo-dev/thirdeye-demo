@@ -77,6 +77,11 @@ def results_path(run_id: str) -> str:
     return os.path.join(run_dir(run_id), "results.json")
 
 
+def edge_results_path(run_id: str) -> str:
+    """Path to the edge simulation or edge-device results JSON for a run."""
+    return os.path.join(run_dir(run_id), "edge_results.json")
+
+
 def read_results(run_id: str) -> dict[str, Any] | None:
     """Read inference results for a run."""
     path = results_path(run_id)

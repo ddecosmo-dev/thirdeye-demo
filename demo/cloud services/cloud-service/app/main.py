@@ -72,6 +72,7 @@ async def startup_event():
         _DEVICE = "cpu"
     
     logger.warning("=" * 70)
+    logger.warning(f"DATA_DIR={settings.data_dir}")
     logger.warning(f"LOADING ALL MODELS AT STARTUP (Device: {_DEVICE.upper()})")
     logger.warning("=" * 70)
     try:

@@ -28,6 +28,10 @@ class IngestResponse(BaseModel):
     file_count: int
     total_uncompressed_bytes: int
     checksum_sha256: str
+    edge_results_source: str | None = Field(
+        default=None,
+        description="Whether edge results were uploaded directly or simulated on ingest.",
+    )
 
 
 class InferenceRequest(BaseModel):

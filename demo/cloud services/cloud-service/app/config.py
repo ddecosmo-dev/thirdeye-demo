@@ -5,7 +5,10 @@ import os
 
 
 class Settings(BaseModel):
-    data_dir: str = os.getenv("DATA_DIR", "/data")
+    data_dir: str = os.getenv(
+        "DATA_DIR",
+        os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "data")),
+    )
     # TODO: Move limits into a typed config file for easier deployment changes.
     max_upload_bytes: int = int(os.getenv("MAX_UPLOAD_BYTES", "2147483648"))  # 2GB
     max_uncompressed_bytes: int = int(os.getenv("MAX_UNCOMPRESSED_BYTES", "2147483648"))  # 2GB
