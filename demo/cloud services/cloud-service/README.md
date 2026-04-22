@@ -20,11 +20,23 @@ Runs are stored under DATA_DIR (default: /data):
 
 ## Run locally
 
-```
+From the cloud service directory:
+
+```bash
+cd "/home/devin_ml/work/thirdeye-demo/demo/cloud services/cloud-service"
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-uvicorn app.main:app --reload --port 8080
+uvicorn app.main:app --reload --port 8001
+```
+
+From the dashboard directory:
+
+```bash
+cd "/home/devin_ml/work/thirdeye-demo/demo/dashboard"
+source "/home/devin_ml/work/thirdeye-demo/.venv/bin/activate"
+pip install -r requirements.txt
+uvicorn server_cloud:app --host 127.0.0.1 --port 8080
 ```
 
 ## Build and run container
