@@ -30,8 +30,52 @@ TECH_FLOOR = 3.0
 W_AES = 0.6
 W_OBJ = 0.4
 INFERENCE_SIZE = (320, 240)   # (width, height) for model input
+EDGE_INFERENCE_SIZE = (160, 120)
+EDGE_PREFILTER_THRESHOLD = 0.25
 TOP_N_CHAMPIONS = 20
 TSNE_ITER = 500               # faster than notebook's 1000, negligible quality diff
+
+
+# ─── Edge device simulation helpers ───────────────────────────────────────────
+# Prefilter logic mirrors the edge device pipeline on a lightweight image pass.
+def edge_prefilter_metrics(pil_img: Image.Image) -> tuple[float, bool, str]:
+    """Simulate a lightweight edge prefilter from the edge device pipeline."""
+    gray = np.asarray(pil_img.convert("L"), dtype=np.float32)
+    avg_luma = float(gray.mean()) / 255.0
+
+    if avg_luma < EDGE_PREFILTER_THRESHOLD:
+        return avg_luma, False, "too_dark"
+    return avg_luma, True, "passed"
+
+
+def compute_edge_scores(
+    pil_img: Image.Image,
+    aes_scorer: AestheticScorer,
+    device: str,
+) -> dict[str, object]:
+    """Compute edge-style prefilter and scenic score fields for a single image."""
+    prefilter_score, prefilter_passed, prefilter_reason = edge_prefilter_metrics(pil_img)
+    scenic_score = None
+
+    edge_tag = "prefilter_failed"
+    if prefilter_passed:
+        edge_input = pil_img.resize(EDGE_INFERENCE_SIZE, Image.LANCZOS)
+        edge_inputs = aes_scorer.processor(images=edge_input, return_tensors="pt")
+        edge_inputs = {
+            k: v.to(device) if hasattr(v, "to") else v
+            for k, v in edge_inputs.items()
+        }
+        with torch.no_grad():
+            scenic_score, _ = aes_scorer.score(edge_inputs)
+        edge_tag = "scenic_scored"
+
+    return {
+        "edge_prefilter_score": float(prefilter_score),
+        "edge_prefilter_passed": bool(prefilter_passed),
+        "edge_prefilter_reason": prefilter_reason,
+        "edge_scenic_score": float(scenic_score) if scenic_score is not None else None,
+        "edge_tag": edge_tag,
+    }
 
 
 # ─── Preprocessing ────────────────────────────────────────────────────────────
@@ -138,6 +182,7 @@ def score_images(
                 aes_score, embed = aes_scorer.score(aes_inputs)
                 obj_score = obj_scorer.score(obj_inputs, pil_img.size[::-1])
 
+            edge_data = compute_edge_scores(original_pil, aes_scorer, device)
             all_embeddings.append(embed)
 
             records.append(
@@ -147,6 +192,11 @@ def score_images(
                     "technical_score": float(tech_score),
                     "aesthetic_score": float(aes_score),
                     "object_aesthetic_score": float(obj_score),
+                    "edge_prefilter_score": edge_data["edge_prefilter_score"],
+                    "edge_prefilter_passed": edge_data["edge_prefilter_passed"],
+                    "edge_prefilter_reason": edge_data["edge_prefilter_reason"],
+                    "edge_scenic_score": edge_data["edge_scenic_score"],
+                    "edge_tag": edge_data["edge_tag"],
                 }
             )
         except Exception as e:
@@ -158,6 +208,11 @@ def score_images(
                     "technical_score": 0.0,
                     "aesthetic_score": 0.0,
                     "object_aesthetic_score": 0.0,
+                    "edge_prefilter_score": 0.0,
+                    "edge_prefilter_passed": False,
+                    "edge_prefilter_reason": "error",
+                    "edge_scenic_score": None,
+                    "edge_tag": "error",
                     "error": str(e),
                 }
             )
@@ -368,6 +423,13 @@ def dataframe_to_results_json(df: pd.DataFrame, embeddings: np.ndarray) -> list[
                 "technical": float(row.get("technical_score", 0)),
                 "aesthetic": float(row.get("aesthetic_score", 0)),
                 "object": float(row.get("object_aesthetic_score", 0)),
+            },
+            "edge": {
+                "prefilter_score": float(row.get("edge_prefilter_score", 0)),
+                "prefilter_passed": bool(row.get("edge_prefilter_passed", False)),
+                "prefilter_reason": row.get("edge_prefilter_reason"),
+                "scenic_score": float(row["edge_scenic_score"]) if row.get("edge_scenic_score") is not None and not pd.isna(row["edge_scenic_score"]) else None,
+                "tag": row.get("edge_tag"),
             },
             "normalized_scores": {
                 "tech_norm": float(row.get("tech_norm", 0)),
