@@ -11,6 +11,7 @@ from typing import Any
 import numpy as np
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 
 from .config import settings
 from .cycles import notify_edge
@@ -198,6 +199,32 @@ async def get_run(run_id: str) -> dict[str, Any]:
     if not meta:
         raise HTTPException(status_code=404, detail="Run not found")
     return meta
+
+
+@app.get("/runs/{run_id}/images/{filename}")
+async def get_run_image(run_id: str, filename: str):
+    """Serve an image from a run's images directory."""
+    run_path = os.path.join(runs_root(), run_id)
+    if not os.path.exists(run_path):
+        raise HTTPException(status_code=404, detail=f"Run {run_id} not found")
+
+    images_directory = os.path.join(run_path, "images")
+    if not os.path.exists(images_directory):
+        raise HTTPException(status_code=404, detail=f"No images directory for run {run_id}")
+
+    image_path = os.path.join(images_directory, filename)
+    if not os.path.exists(image_path):
+        raise HTTPException(status_code=404, detail=f"Image {filename} not found for run {run_id}")
+
+    content_type = "image/jpeg"
+    if filename.lower().endswith(".png"):
+        content_type = "image/png"
+    elif filename.lower().endswith(".gif"):
+        content_type = "image/gif"
+    elif filename.lower().endswith(".webp"):
+        content_type = "image/webp"
+
+    return FileResponse(image_path, media_type=content_type)
 
 
 # ─── Background Inference Task ────────────────────────────────────────────────

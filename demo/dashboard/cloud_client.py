@@ -28,6 +28,16 @@ class CloudServiceClient:
             logger.error(f"Cloud service health check failed: {e}")
             return False
 
+    async def get_runs(self) -> dict[str, Any]:
+        """List available runs from the cloud service."""
+        try:
+            response = await self.client.get(f"{self.base_url}/runs")
+            response.raise_for_status()
+            return response.json()
+        except Exception as e:
+            logger.error(f"Failed to get runs: {e}")
+            raise
+
     async def ingest_zip(self, run_id: str, zip_path: str, metadata: dict[str, Any] | None = None) -> dict[str, Any]:
         """Upload a zip file to the cloud service."""
         try:
@@ -109,6 +119,18 @@ class CloudServiceClient:
             raise
         except Exception as e:
             logger.error(f"Failed to get results: {e}")
+            raise
+
+    async def get_image(self, run_id: str, filename: str) -> httpx.Response:
+        """Retrieve an image file for a run from the cloud service."""
+        try:
+            response = await self.client.get(f"{self.base_url}/runs/{run_id}/images/{filename}")
+            response.raise_for_status()
+            return response
+        except httpx.HTTPStatusError:
+            raise
+        except Exception as e:
+            logger.error(f"Failed to fetch image {filename} for run {run_id}: {e}")
             raise
 
     async def wait_for_results(self, run_id: str, max_wait_seconds: float = 3600, poll_interval: float = 5) -> dict[str, Any] | None:

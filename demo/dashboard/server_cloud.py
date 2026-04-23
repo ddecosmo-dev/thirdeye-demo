@@ -19,11 +19,12 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+import httpx
 import numpy as np
 import pandas as pd
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
 from cloud_client import CloudServiceClient
@@ -31,7 +32,6 @@ from cloud_client import CloudServiceClient
 # ─── Logging ──────────────────────────────────────────────────────────────────
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
 # ─── App Setup ───────────────────────────────────────────────────────────────
 app = FastAPI(title="ThirdEye Dashboard")
 
@@ -223,10 +223,11 @@ async def _async_infer_and_poll(
         if not results:
             raise Exception("Timeout waiting for inference results from cloud service")
         
+        results_list = results.get("results", [])
+        champion_count = results.get("champion_count", sum(1 for img in results_list if img.get("is_champion")))
         logger.info(f"Received results: {champion_count} champions from {file_count} images")
         
         # Process results for dashboard (do NOT compute TSNE upfront, store embeddings instead)
-        results_list = results.get("results", [])
         
         # Reconstruct dataframe from results
         df_data = []
@@ -565,72 +566,60 @@ async def get_image(index: int) -> dict:
 
 @app.get("/images/{filename}")
 async def get_image_file(filename: str):
-    """Serve image file from cloud service run directory."""
-    from fastapi.responses import FileResponse
-    
+    """Proxy image requests through the cloud service."""
     with _state_lock:
         if not _state.run_id:
             raise HTTPException(status_code=404, detail="No active run")
-        
-        # Construct absolute path to image file
-        # Dashboard is at /demo/dashboard, data is at /demo/data
-        img_path = Path(__file__).parent.parent / "data" / "runs" / _state.run_id / "images" / filename
-        
-        if not img_path.exists():
-            logger.warning(f"Image not found: {img_path}")
-            raise HTTPException(status_code=404, detail=f"Image {filename} not found")
-        
-        return FileResponse(img_path, media_type="image/jpeg")
+        run_id = _state.run_id
+
+    try:
+        response = await cloud_client.get_image(run_id, filename)
+    except httpx.HTTPStatusError as e:
+        if e.response.status_code == 404:
+            raise HTTPException(status_code=404, detail=f"Image {filename} not found for run {run_id}")
+        raise
+    except Exception as e:
+        logger.error(f"Failed to proxy image request for {filename}: {e}", exc_info=True)
+        raise HTTPException(status_code=502, detail="Failed to retrieve image from cloud service")
+
+    content_type = response.headers.get("content-type", "application/octet-stream")
+    return StreamingResponse(response.aiter_bytes(), media_type=content_type)
 
 
 @app.get("/runs")
 async def list_available_runs() -> dict:
-    """List all available scored datasets."""
-    runs_dir = Path(__file__).parent.parent / "data" / "runs"
-    
-    if not runs_dir.exists():
-        return {"runs": []}
-    
+    """List all available scored datasets from the cloud service."""
+    cloud_runs = await cloud_client.get_runs()
+    runs = cloud_runs.get("runs", []) if isinstance(cloud_runs, dict) else []
+
     available_runs = []
-    for run_dir in sorted(runs_dir.iterdir()):
-        if run_dir.is_dir():
-            # Check if this run has results
-            images_dir = run_dir / "images"
-            results_file = run_dir / "results.json"
-            
-            if images_dir.exists() and results_file.exists():
-                try:
-                    with open(results_file) as f:
-                        results_data = json.load(f)
-                    image_count = len(list(images_dir.glob("*.jpg")))
-                    available_runs.append({
-                        "run_id": run_dir.name,
-                        "image_count": image_count,
-                        "champion_count": results_data.get("champion_count", 0),
-                    })
-                except Exception as e:
-                    logger.warning(f"Error reading run {run_dir.name}: {e}")
-    
+    for run_meta in runs:
+        run_id = run_meta.get("run_id")
+        champion_count = run_meta.get("champion_count", 0)
+        image_count = run_meta.get("image_count")
+        if image_count is None and run_id:
+            results = await cloud_client.get_results(run_id)
+            if results is not None:
+                image_count = len(results.get("results", []))
+                champion_count = results.get("champion_count", champion_count)
+
+        available_runs.append({
+            "run_id": run_id,
+            "image_count": image_count if image_count is not None else 0,
+            "champion_count": champion_count,
+        })
+
     return {"runs": available_runs}
 
 
 @app.post("/load-run/{run_id}")
 async def load_run(run_id: str) -> dict:
     """Load a previously scored run without re-running inference."""
-    runs_dir = Path(__file__).parent.parent / "data" / "runs"
-    run_dir = runs_dir / run_id
-    
-    if not run_dir.exists():
-        raise HTTPException(status_code=404, detail=f"Run {run_id} not found")
-    
+    results = await cloud_client.get_results(run_id)
+    if not results:
+        raise HTTPException(status_code=404, detail=f"No results found for run {run_id}")
+
     try:
-        results_file = run_dir / "results.json"
-        
-        if not results_file.exists():
-            raise HTTPException(status_code=404, detail=f"No results for run {run_id}")
-        
-        with open(results_file) as f:
-            results = json.load(f)
         
         # Reconstruct the dataframe from the results
         results_list = results.get("results", [])
