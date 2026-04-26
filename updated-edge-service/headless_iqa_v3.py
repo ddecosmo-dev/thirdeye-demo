@@ -19,7 +19,7 @@ import numpy as np
 
 #fix if needed
 #BLOB_PATH = Path("~/thirdeye_project/student_mobilenet_v3.blob").expanduser()
-BLOB_PATH = Path(__file__).resolve().parent / "student_mobilenet_v3.blob"
+BLOB_PATH = Path(__file__).resolve().parent / "models" / "student_mobilenet_v3_small.blob"
 RUN_SECONDS = 10
 SET_FPS = 2.0
 
