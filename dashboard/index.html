@@ -162,6 +162,8 @@
     .badge-tech     { background: #3d1a1a; color: var(--red); }
     .badge-outscored{ background: #2a2a1a; color: var(--yellow); }
     .badge-champion { background: #1a3d2a; color: var(--green); }
+    .badge-edge-pass{ background: #102a3d; color: #7ec8f8; }
+    .badge-edge-fail{ background: #3d1a1a; color: var(--red); }
 
     /* ── Filter Buttons ───────────────────────────────────────────────────── */
     .filter-row { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
@@ -183,6 +185,7 @@
     }
     #dist-plot { width: 100%; height: 400px; }
     #cluster-plot { width: 100%; height: 500px; }
+    #edge-cloud-plot { width: 100%; height: 500px; }
 
     /* ── Modal ────────────────────────────────────────────────────────────── */
     .modal-backdrop {
@@ -222,6 +225,28 @@
     .bar-aes  { background: var(--accent2); }
     .bar-obj  { background: var(--green); }
     .bar-agg  { background: var(--yellow); }
+
+    /* Modal score sections */
+    .score-section-title {
+      font-size: 11px; font-weight: 700; color: var(--muted);
+      text-transform: uppercase; letter-spacing: 0.06em;
+      margin: 14px 0 8px;
+    }
+    .score-section-title:first-child { margin-top: 0; }
+    .edge-stats { display: flex; flex-direction: column; gap: 6px; }
+    .edge-row {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 6px 10px; background: var(--surface2); border-radius: var(--radius);
+      font-size: 12px;
+    }
+    .edge-row-label { color: var(--muted); }
+    .edge-row-value { font-weight: 600; color: var(--text); font-variant-numeric: tabular-nums; }
+    .edge-pill {
+      font-size: 11px; font-weight: 600; padding: 3px 9px; border-radius: 99px;
+    }
+    .edge-pill-pass { background: #102a3d; color: #7ec8f8; }
+    .edge-pill-fail { background: #3d1a1a; color: var(--red); }
+    .edge-empty { font-size: 12px; color: var(--muted); font-style: italic; padding: 6px 10px; }
 
     /* ── Empty / Loading States ───────────────────────────────────────────── */
     .empty-state {
@@ -319,6 +344,7 @@
   <button class="tab-btn active" onclick="switchTab('champions', this)">Champions</button>
   <button class="tab-btn" onclick="switchTab('cluster', this)">Cluster Map</button>
   <button class="tab-btn" onclick="switchTab('distributions', this)">Score Distributions</button>
+  <button class="tab-btn" onclick="switchTab('edge-cloud', this)">Edge vs Cloud</button>
   <button class="tab-btn" onclick="switchTab('rejected', this)">Rejected Images</button>
 </div>
 
@@ -348,6 +374,18 @@
   <div id="dist-plot"></div>
 </div>
 
+<!-- ── Tab: Edge vs Cloud ──────────────────────────────────────────────────── -->
+<div class="tab-content" id="tab-edge-cloud">
+  <div class="dist-controls">
+    <select id="edge-cloud-metric" onchange="renderEdgeVsCloud()">
+      <option value="scenic_obj">Edge Scenic vs Cloud Object</option>
+      <option value="scenic_agg">Edge Scenic vs Cloud Aggregated</option>
+      <option value="blur_tech">Edge Blur Variance vs Cloud Technical</option>
+    </select>
+  </div>
+  <div id="edge-cloud-plot"></div>
+</div>
+
 <!-- ── Tab: Rejected Images ────────────────────────────────────────────────── -->
 <div class="tab-content" id="tab-rejected">
   <div class="filter-row">
@@ -367,7 +405,10 @@
       <img id="modal-img" class="modal-img" src="" alt="" />
       <div class="modal-scores">
         <h3 id="modal-title">—</h3>
+        <div class="score-section-title">Cloud Scores</div>
         <div class="score-bars" id="modal-bars"></div>
+        <div class="score-section-title">Edge Scores</div>
+        <div class="edge-stats" id="modal-edge"></div>
         <div class="modal-why" id="modal-why"></div>
       </div>
     </div>
@@ -383,6 +424,7 @@ let _pollTimer = null;
 let _debounceTimer = null;
 let _clusterPlotReady = false;
 let _distPlotReady = false;
+let _edgeCloudPlotReady = false;
 
 // Plotly 2.x removed d3 color scales — use a fixed palette
 const CLUSTER_COLORS = [
@@ -505,6 +547,7 @@ function renderAll() {
   // so they get correct dimensions — see switchTab()
   _clusterPlotReady = false;
   _distPlotReady = false;
+  _edgeCloudPlotReady = false;
 }
 
 // ── Champions Tab ─────────────────────────────────────────────────────────────
@@ -660,6 +703,88 @@ function renderDistribution() {
   }
 }
 
+// ── Edge vs Cloud Tab ─────────────────────────────────────────────────────────
+const EDGE_CLOUD_METRICS = {
+  scenic_obj: {
+    edgeKey: 'scenic_score', cloudKey: 'obj_norm',
+    xLabel: 'Edge: scenic_score',           yLabel: 'Cloud: obj_norm (0–10)',
+  },
+  scenic_agg: {
+    edgeKey: 'scenic_score', cloudKey: 'aggregated_score',
+    xLabel: 'Edge: scenic_score',           yLabel: 'Cloud: aggregated_score (0–10)',
+  },
+  blur_tech: {
+    edgeKey: 'blur_variance', cloudKey: 'tech_norm',
+    xLabel: 'Edge: blur_variance (Laplacian)', yLabel: 'Cloud: tech_norm (0–10)',
+  },
+};
+
+function renderEdgeVsCloud() {
+  const plotEl = document.getElementById('edge-cloud-plot');
+  const withEdge = _allImages.filter(img =>
+    img.edge && img.edge.scenic_score != null && img.edge.blur_variance != null
+  );
+
+  if (withEdge.length === 0) {
+    plotEl.innerHTML = `
+      <div class="empty-state">
+        <div class="big">🛰️</div>
+        <p>No edge data available. Upload a zip that contains a <strong>results.json</strong> at the root to see this comparison.</p>
+      </div>`;
+    _edgeCloudPlotReady = false;
+    return;
+  }
+
+  const cfg = EDGE_CLOUD_METRICS[document.getElementById('edge-cloud-metric').value];
+  const champs = withEdge.filter(img => img.is_champion);
+  const others = withEdge.filter(img => !img.is_champion);
+
+  const traces = [
+    {
+      type: 'scattergl',
+      mode: 'markers',
+      name: 'All images',
+      x: others.map(img => img.edge[cfg.edgeKey]),
+      y: others.map(img => img[cfg.cloudKey]),
+      customdata: others.map(img => [img.idx, img.filename]),
+      hovertemplate: '<b>%{customdata[1]}</b><br>Edge: %{x:.4f}<br>Cloud: %{y:.2f}<extra></extra>',
+      marker: { color: '#5b8dee', size: 6, opacity: 0.7 },
+    },
+    {
+      type: 'scattergl',
+      mode: 'markers',
+      name: 'Champions',
+      x: champs.map(img => img.edge[cfg.edgeKey]),
+      y: champs.map(img => img[cfg.cloudKey]),
+      customdata: champs.map(img => [img.idx, img.filename]),
+      hovertemplate: '<b>%{customdata[1]}</b><br>Edge: %{x:.4f}<br>Cloud: %{y:.2f}<br>★ Champion<extra></extra>',
+      marker: { color: '#fbbf24', symbol: 'star', size: 12, line: { color: '#000', width: 1 } },
+    },
+  ];
+
+  const layout = {
+    paper_bgcolor: '#1a1d27',
+    plot_bgcolor:  '#1a1d27',
+    font: { color: '#e2e8f0', size: 12 },
+    xaxis: { title: cfg.xLabel, gridcolor: '#2e3247', zeroline: false },
+    yaxis: { title: cfg.yLabel, gridcolor: '#2e3247', zeroline: false },
+    legend: { bgcolor: 'rgba(0,0,0,0.3)', bordercolor: '#2e3247', borderwidth: 1 },
+    margin: { t: 20, l: 70, r: 20, b: 60 },
+    hovermode: 'closest',
+  };
+
+  if (!_edgeCloudPlotReady) {
+    Plotly.newPlot('edge-cloud-plot', traces, layout, { responsive: true });
+    plotEl.on('plotly_click', (evt) => {
+      const pt = evt.points[0];
+      if (pt && pt.customdata) openModal(_allImages[pt.customdata[0]]);
+    });
+    _edgeCloudPlotReady = true;
+  } else {
+    Plotly.react('edge-cloud-plot', traces, layout);
+  }
+}
+
 // ── Rejected Images Tab ───────────────────────────────────────────────────────
 function renderRejected() {
   let rejected = _allImages.filter(img => !img.is_champion);
@@ -718,6 +843,10 @@ function buildImageGrid(images) {
     } else if (img.rejection_reason === 'outscored_in_cluster') {
       badges.appendChild(makeBadge('Outscored', 'badge-outscored'));
     }
+    if (img.edge) {
+      const passed = img.edge.prefilter_passed === true;
+      badges.appendChild(makeBadge(passed ? 'Edge ✓' : 'Edge ✗', passed ? 'badge-edge-pass' : 'badge-edge-fail'));
+    }
 
     meta.appendChild(score);
     meta.appendChild(badges);
@@ -734,6 +863,46 @@ function makeBadge(text, cls) {
   b.className = `badge ${cls}`;
   b.textContent = text;
   return b;
+}
+
+function fmtNum(v, digits) {
+  return (v == null || Number.isNaN(v)) ? '—' : Number(v).toFixed(digits);
+}
+
+function renderEdgePanel(edge) {
+  const el = document.getElementById('modal-edge');
+  el.innerHTML = '';
+  if (!edge) {
+    const empty = document.createElement('div');
+    empty.className = 'edge-empty';
+    empty.textContent = 'No edge data for this image (results.json missing or filename mismatch).';
+    el.appendChild(empty);
+    return;
+  }
+
+  const passed = edge.prefilter_passed === true;
+  const pillCls = passed ? 'edge-pill-pass' : 'edge-pill-fail';
+  const pillText = passed ? '✓ Passed' : '✗ Failed';
+  const reason = edge.prefilter_reason ? ` — ${edge.prefilter_reason}` : '';
+
+  const rows = [
+    { label: 'Prefilter', html: `<span class="edge-pill ${pillCls}">${pillText}</span><span class="edge-row-value" style="margin-left:8px">${reason ? edge.prefilter_reason : ''}</span>` },
+    { label: 'Scenic (edge)',  value: fmtNum(edge.scenic_score, 4) },
+    { label: 'Blur variance',  value: fmtNum(edge.blur_variance, 2) },
+    { label: 'Mean intensity', value: fmtNum(edge.mean_intensity, 2) },
+  ];
+  if (edge.frame_index != null) rows.push({ label: 'Frame index', value: String(edge.frame_index) });
+
+  rows.forEach(r => {
+    const row = document.createElement('div');
+    row.className = 'edge-row';
+    if (r.html !== undefined) {
+      row.innerHTML = `<span class="edge-row-label">${r.label}</span><span>${r.html}</span>`;
+    } else {
+      row.innerHTML = `<span class="edge-row-label">${r.label}</span><span class="edge-row-value">${r.value}</span>`;
+    }
+    el.appendChild(row);
+  });
 }
 
 // ── Modal ─────────────────────────────────────────────────────────────────────
@@ -759,6 +928,8 @@ function openModal(img) {
     `;
     barsEl.appendChild(row);
   });
+
+  renderEdgePanel(img.edge);
 
   const whyEl = document.getElementById('modal-why');
   if (img.is_champion) {
@@ -850,6 +1021,7 @@ async function recluster(epsilon, minClusterSize, ignoreObject) {
     renderRejected();
     if (_clusterPlotReady) renderClusterMap();
     if (_distPlotReady) renderDistribution();  // champion overlay changes
+    if (_edgeCloudPlotReady) renderEdgeVsCloud();  // champion overlay changes
   } catch (e) {
     console.error('Recluster failed:', e);
   }
@@ -874,6 +1046,13 @@ function switchTab(name, btn) {
       renderDistribution(); // first visit
     } else if (_distPlotReady) {
       Plotly.Plots.resize(document.getElementById('dist-plot'));
+    }
+  }
+  if (name === 'edge-cloud') {
+    if (_allImages.length > 0 && !_edgeCloudPlotReady) {
+      renderEdgeVsCloud(); // first visit
+    } else if (_edgeCloudPlotReady) {
+      Plotly.Plots.resize(document.getElementById('edge-cloud-plot'));
     }
   }
 }
@@ -910,6 +1089,7 @@ function hideResults() {
   document.getElementById('recluster-banner').classList.remove('visible');
   _clusterPlotReady = false;
   _distPlotReady = false;
+  _edgeCloudPlotReady = false;
 }
 
 // ── Init ──────────────────────────────────────────────────────────────────────

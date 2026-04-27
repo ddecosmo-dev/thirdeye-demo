@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 os.environ.setdefault("PYTORCH_ENABLE_MPS_FALLBACK", "1")
 
+import json
 import shutil
 import tempfile
 import threading
@@ -66,6 +67,7 @@ class PipelineState:
     epsilon: float = 0.12
     min_cluster_size: int = 2
     ignore_object: bool = False
+    edge_results: dict | None = None  # filename -> edge entry from results.json
 
 
 _state = PipelineState()
@@ -80,10 +82,10 @@ def _update_state(**kwargs: Any) -> None:
 
 
 # ─── Zip Extraction (adapted from cloud-service/app/ingest.py) ────────────────
-def _extract_zip_safely(zip_path: Path, dest_dir: Path) -> list[Path]:
+def _extract_zip_safely(zip_path: Path, dest_dir: Path) -> tuple[list[Path], dict | None]:
     """
     Extract a zip file to dest_dir, enforcing path safety.
-    Returns sorted list of extracted image paths.
+    Returns (sorted image paths, edge_results dict keyed by image_filename or None).
     Raises ValueError on unsafe content.
     """
     dest_dir.mkdir(parents=True, exist_ok=True)
@@ -100,6 +102,7 @@ def _extract_zip_safely(zip_path: Path, dest_dir: Path) -> list[Path]:
 
         image_paths: list[Path] = []
         seen_names: dict[str, int] = {}
+        edge_results: dict | None = None
 
         for info in zf.infolist():
             if info.is_dir():
@@ -107,6 +110,21 @@ def _extract_zip_safely(zip_path: Path, dest_dir: Path) -> list[Path]:
             basename = Path(info.filename).name
             if basename.startswith("._") or basename.startswith("__MACOSX"):
                 continue
+
+            if basename.lower() == "results.json":
+                try:
+                    with zf.open(info) as src:
+                        payload = json.loads(src.read().decode("utf-8"))
+                    entries = payload.get("entries", []) if isinstance(payload, dict) else []
+                    edge_results = {
+                        e["image_filename"]: e
+                        for e in entries
+                        if isinstance(e, dict) and "image_filename" in e
+                    }
+                except (json.JSONDecodeError, UnicodeDecodeError):
+                    edge_results = None
+                continue
+
             ext = Path(basename).suffix.lower()
             if ext not in image_extensions:
                 continue
@@ -124,7 +142,7 @@ def _extract_zip_safely(zip_path: Path, dest_dir: Path) -> list[Path]:
                 dst.write(src.read())
             image_paths.append(dest_path)
 
-    return sorted(image_paths)
+    return sorted(image_paths), edge_results
 
 
 # ─── Background Pipeline Thread ───────────────────────────────────────────────
@@ -142,7 +160,7 @@ def _run_pipeline_thread(zip_path: str, epsilon: float, min_cluster_size: int = 
         _update_state(stage="extracting", stage_index=1, images_done=0, images_total=0)
         tmp_root = Path(tempfile.gettempdir()) / f"thirdeye_{uuid.uuid4().hex}"
         images_dir = tmp_root / "images"
-        image_paths = _extract_zip_safely(Path(zip_path), images_dir)
+        image_paths, edge_results = _extract_zip_safely(Path(zip_path), images_dir)
         Path(zip_path).unlink(missing_ok=True)  # remove temp upload file
         filenames = [p.name for p in image_paths]
 
@@ -153,6 +171,7 @@ def _run_pipeline_thread(zip_path: str, epsilon: float, min_cluster_size: int = 
             images_dir=images_dir,
             image_filenames=filenames,
             images_total=len(image_paths),
+            edge_results=edge_results,
         )
 
         # Stage 2: Load models
@@ -226,13 +245,31 @@ class ReclusterRequest(BaseModel):
 
 
 # ─── Serialization Helper ─────────────────────────────────────────────────────
-def _df_to_image_list(df: pd.DataFrame) -> list[dict]:
+def _edge_entry_to_dict(entry: dict) -> dict:
+    return {
+        "frame_index": int(entry["frame_index"]) if "frame_index" in entry else None,
+        "timestamp": entry.get("timestamp"),
+        "scenic_score": float(entry["scenic_score"]) if "scenic_score" in entry else None,
+        "blur_variance": float(entry["blur_variance"]) if "blur_variance" in entry else None,
+        "mean_intensity": float(entry["mean_intensity"]) if "mean_intensity" in entry else None,
+        "prefilter_passed": bool(entry["prefilter_passed"]) if "prefilter_passed" in entry else None,
+        "prefilter_reason": entry.get("prefilter_reason"),
+    }
+
+
+def _df_to_image_list(df: pd.DataFrame, edge_results: dict | None = None) -> list[dict]:
     records = []
     for _, row in df.iterrows():
+        filename = str(row["filename"])
+        edge = None
+        if edge_results is not None:
+            entry = edge_results.get(filename)
+            if entry is not None:
+                edge = _edge_entry_to_dict(entry)
         records.append(
             {
                 "idx": int(row["idx"]),
-                "filename": str(row["filename"]),
+                "filename": filename,
                 "tech_score": float(row.get("technical_score", 0)),
                 "aes_score": float(row.get("aesthetic_score", 0)),
                 "obj_score": float(row.get("object_aesthetic_score", 0)),
@@ -246,6 +283,7 @@ def _df_to_image_list(df: pd.DataFrame) -> list[dict]:
                 "tsne_y": float(row.get("tsne_y", 0)),
                 "is_champion": bool(row.get("is_final_selection", 0) == 1),
                 "rejection_reason": row.get("rejection_reason"),
+                "edge": edge,
             }
         )
     return records
@@ -300,6 +338,7 @@ async def run_pipeline(
         error=None,
         scores_df=None,
         embeddings=None,
+        edge_results=None,
         epsilon=epsilon,
         min_cluster_size=min_cluster_size,
     )
@@ -344,8 +383,9 @@ async def get_results() -> dict:
         epsilon = _state.epsilon
         min_cluster_size = _state.min_cluster_size
         ignore_object = _state.ignore_object
+        edge_results = _state.edge_results
 
-    images = _df_to_image_list(df)
+    images = _df_to_image_list(df, edge_results)
     champions = [img["idx"] for img in images if img["is_champion"]]
     cluster_ids = [r for r in df["cluster_id"].unique() if r != -1]
     noise_count = int((df["cluster_id"] == -1).sum())
